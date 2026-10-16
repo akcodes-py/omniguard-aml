@@ -45,7 +45,8 @@ async def investigate_status(alert_id: str, _: None = Depends(require_key)) -> d
     con = connect()
     try:
         cur = con.cursor()
-        row = fetchone(cur, f"SELECT run_id, disposition, ml_scores, verifier_result, created_at"
+        row = fetchone(cur, f"SELECT run_id, disposition, ml_scores, verifier_result, token_cost,"
+                            f" injection_scan, created_at"
                             f" FROM {t('investigation_runs')}"
                             f" WHERE alert_id=? ORDER BY created_at DESC LIMIT 1", (alert_id,))
         if not row:
