@@ -7,7 +7,7 @@ const page = { background: BG, color: TXT, minHeight: "100vh" };
 const wrap = { maxWidth: 980, margin: "0 auto", padding: "20px 16px 60px" };
 const header = { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 };
 const tabs = { display: "flex", gap: 24, borderBottom: `1px solid ${LINE}`, margin: "12px 0 16px" };
-const tab = (on) => ({ padding: "8px 2px", cursor: "pointer", fontSize: 14,
+const tabStyle = (on) => ({ padding: "8px 2px", cursor: "pointer", fontSize: 14,
   color: on ? TXT : MUT, borderBottom: on ? `2px solid ${TXT}` : "2px solid transparent", marginBottom: -1 });
 const panel = { background: PANEL, border: `1px solid ${LINE}`, borderRadius: 8, padding: 16, marginBottom: 16 };
 const title = { fontSize: 13, fontWeight: 700, margin: "0 0 12px" };
@@ -258,8 +258,8 @@ export default function App() {
           </div>
         )}
         <div style={tabs}>
-          <span style={tab(tab === "inv")} onClick={() => setTab("inv")}>Investigations ({invRows.length})</span>
-          <span style={tab(tab === "scn")} onClick={() => setTab("scn")}>Scenario runs ({scnRows.length})</span>
+          <span style={tabStyle(tab === "inv")} onClick={() => setTab("inv")}>Investigations ({invRows.length})</span>
+          <span style={tabStyle(tab === "scn")} onClick={() => setTab("scn")}>Scenario runs ({scnRows.length})</span>
         </div>
         {tab === "inv"
           ? <Investigate k={key} rows={invRows} setRows={setInvRows} />
