@@ -9,7 +9,16 @@ fail-fast (no insecure fallbacks for secrets). STRICT_LLM=true turns any
 missing-key or total-LLM-outage into a loud startup/call failure instead
 of silent mock.
 """
+from __future__ import annotations
+
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# MLflow 3.x blocks the filesystem tracking backend unless explicitly allowed.
+# Local default URI is ./mlruns (file store), so opt in by default; a real env
+# var still wins (setdefault).
+os.environ.setdefault("MLFLOW_ALLOW_FILE_STORE", "true")
 
 
 class Settings(BaseSettings):

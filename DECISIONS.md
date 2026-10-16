@@ -170,6 +170,19 @@ anything. Edges: CI workflow, DEMO.md script, clean-clone compose verified
 (fail-fast messages + config), UI click-through ready.
 32 tests green on SQLite; verified complete.
 
+### D22. MLflow file store re-enabled + train metrics split — ACCEPTED (2026-10-17)
+Context: verification pass found MLflow 3.x raises on the `./mlruns` file
+store by default, and `train.py` logged a string (`shipped_family`) via
+`log_metrics` — both swallowed by `except: pass`, so zero experiment data
+existed (`mlruns/` absent) while docs claimed tracking. Found during
+codebase verification (the behavior would silently recur with any mlflow>=3).
+Decision: `config.py` sets `MLFLOW_ALLOW_FILE_STORE=true` via `setdefault`
+(real env still wins); `train.py` logs numeric metrics only + `shipped_family`
+as a param, and warns to stderr instead of silently skipping.
+Consequence: `mlruns/` now holds real runs (train_split: 14 metrics matching
+README table P/R/F1; train: pos_rate). File store is MLflow "maintenance
+mode" — v2 should migrate to `sqlite:///mlflow.db` or the compose server.
+
 ## Proposed (v2 Roadmap)
 
 ### P1. Dedicated Production LLM Endpoints — PROPOSED

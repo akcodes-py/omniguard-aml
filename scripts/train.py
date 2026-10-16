@@ -95,9 +95,11 @@ def main(test_size: float = 0.25) -> None:
         mlflow.set_tracking_uri(str(settings.MLFLOW_TRACKING_URI))
         with mlflow.start_run(run_name="train_split"):
             mlflow.log_params({"model_type": meta["model_type"], "n": len(y), "test_size": test_size})
-            mlflow.log_metrics(rep)
-    except Exception:
-        pass
+            # metrics must be numeric — shipped_family is a param, not a metric
+            mlflow.log_metrics({k: v for k, v in rep.items() if isinstance(v, (int, float))})
+            mlflow.log_param("shipped_family", winner)
+    except Exception as e:  # noqa: BLE001 — never block training on tracking
+        print(f"WARNING: mlflow logging skipped ({e})", file=sys.stderr)
 
 
 if __name__ == "__main__":
