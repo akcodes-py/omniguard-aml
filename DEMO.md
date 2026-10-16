@@ -4,7 +4,7 @@
 1. `docker compose up -d postgres redis` (+ `docker compose --profile full up -d mlflow` if RAM allows)
 2. Copy `.env.example` to `.env`, fill `POSTGRES_PASSWORD`, `API_KEY`, `NIM_API_KEY`
 3. `python scripts/seed.py --reset && python scripts/train.py && python -m pytest -q`
-4. Terminal A (repo root): `$env:PYTHONPATH='src'; python -m uvicorn omniguard.api:app --port 8000` (root CWD so `.env` loads)
+4. Terminal A (repo root): `$env:PYTHONPATH='src'; $env:DATABASE_URL='postgresql://omniguard:<pw>@localhost:5433/omniguard'; python -m uvicorn omniguard.api:app --port 8000` (root CWD so `.env` loads; PG URL so eval + PaySim data is visible — SQLite only has toy alerts)
 5. Terminal B: `cd ui && npm run dev` → http://localhost:5173
 
 ## Part 1 — Investigate a live alert (4 min)

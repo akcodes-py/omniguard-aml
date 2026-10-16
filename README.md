@@ -32,7 +32,7 @@ scenario    -> ingest -> author -> generate (code) -> lock SHA-256 -> challenge 
 
 ```powershell
 cd ui; npm install; npm run dev      # http://localhost:5173
-$env:PYTHONPATH='src'; python -m uvicorn omniguard.api:app --port 8000   # from repo root (loads .env)
+$env:PYTHONPATH='src'; $env:DATABASE_URL='postgresql://omniguard:<pw>@localhost:5433/omniguard'; python -m uvicorn omniguard.api:app --port 8000   # repo root (loads .env); PG URL for eval/PaySim data
 ```
 One page: API-key bar, Health, Investigate (submit → poll → review),
 ScenarioLab (concern → approve → results). Manual click-through pending
