@@ -1,0 +1,13 @@
+.env
+data/
+models/
+mlruns/
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+ui/dist/
+*.db
+kaggle/
+models/
+mlruns/

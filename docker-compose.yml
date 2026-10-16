@@ -1,0 +1,96 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: omniguard
+      POSTGRES_USER: omniguard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    ports:
+      - "5433:5432"  # host 5432 belongs to local PG18 service; container keeps 5432 internally
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U omniguard"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  mlflow:
+    profiles: ["full"]
+    image: ghcr.io/mlflow/mlflow:v2.12.2
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow/mlflow.db --default-artifact-root /mlflow/artifacts
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflowdata:/mlflow
+    depends_on:
+      - postgres
+
+  api:
+    profiles: ["full"]
+    build: .
+    command: uvicorn omniguard.api:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://omniguard:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/omniguard
+      REDIS_URL: redis://redis:6379
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      API_KEY: ${API_KEY:?set API_KEY in .env}
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      STRICT_LLM: ${STRICT_LLM:-false}
+      NIM_BASE_URL: ${NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      NIM_API_KEY: ${NIM_API_KEY:-}
+      NIM_REASON_MODEL: ${NIM_REASON_MODEL:-nvidia/nemotron-3-super-120b-a12b}
+      NIM_FAST_MODEL: ${NIM_FAST_MODEL:-nvidia/nemotron-3.5-lightning-30b-a3b}
+      NIM_FALLBACK_MODEL: ${NIM_FALLBACK_MODEL:-nvidia/nemotron-3.5-lightning-30b-a3b}
+      RATE_LIMIT_PER_MIN: ${RATE_LIMIT_PER_MIN:-40}
+      NIM_IDLE_TIMEOUT_S: ${NIM_IDLE_TIMEOUT_S:-30}
+      NIM_DEADLINE_S: ${NIM_DEADLINE_S:-300}
+      NIM_MAX_ATTEMPTS: ${NIM_MAX_ATTEMPTS:-3}
+      BEDROCK_REGION: ${BEDROCK_REGION:-us-east-1}
+      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-anthropic.claude-3-5-sonnet-20240620-v1:0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./src:/app/src
+
+  worker:
+    profiles: ["full"]
+    build: .
+    command: python -m omniguard.worker
+    environment:
+      DATABASE_URL: postgresql+psycopg://omniguard:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/omniguard
+      REDIS_URL: redis://redis:6379
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      STRICT_LLM: ${STRICT_LLM:-false}
+      NIM_BASE_URL: ${NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      NIM_API_KEY: ${NIM_API_KEY:-}
+      NIM_REASON_MODEL: ${NIM_REASON_MODEL:-nvidia/nemotron-3-super-120b-a12b}
+      NIM_FAST_MODEL: ${NIM_FAST_MODEL:-nvidia/nemotron-3.5-lightning-30b-a3b}
+      NIM_FALLBACK_MODEL: ${NIM_FALLBACK_MODEL:-nvidia/nemotron-3.5-lightning-30b-a3b}
+      RATE_LIMIT_PER_MIN: ${RATE_LIMIT_PER_MIN:-40}
+      NIM_IDLE_TIMEOUT_S: ${NIM_IDLE_TIMEOUT_S:-30}
+      NIM_DEADLINE_S: ${NIM_DEADLINE_S:-300}
+      NIM_MAX_ATTEMPTS: ${NIM_MAX_ATTEMPTS:-3}
+      BEDROCK_REGION: ${BEDROCK_REGION:-us-east-1}
+      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-anthropic.claude-3-5-sonnet-20240620-v1:0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./src:/app/src
+
+volumes:
+  pgdata:
+  mlflowdata:
