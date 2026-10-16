@@ -18,8 +18,8 @@ const ghost = { ...btn, background: "transparent", color: TXT, border: `1px soli
 const th = { textAlign: "left", fontSize: 11, color: MUT, fontWeight: 600, padding: "6px 8px", borderBottom: `1px solid ${LINE}` };
 const td = { fontSize: 13, padding: "7px 8px", borderBottom: `1px solid #1b1d21` };
 const pill = (bg) => ({ display: "inline-block", padding: "1px 8px", borderRadius: 10, background: bg, color: "#000", fontSize: 11, fontWeight: 700 });
-const dispPill = (d) => d.includes("ESCALATE") ? pill("#f87171") : d.includes("CLOSE") ? pill("#4ade80") : pill("#fbbf24");
-const verPill = (v) => v === "MATCH" ? pill("#4ade80") : v === "MISS" ? pill("#f87171") : pill("#fbbf24");
+const dispPill = (d) => { d = String(d ?? "—"); return d.includes("ESCALATE") ? pill("#f87171") : d.includes("CLOSE") ? pill("#4ade80") : pill("#fbbf24"); };
+const verPill = (v) => { v = String(v ?? "—"); return v === "MATCH" ? pill("#4ade80") : v === "MISS" ? pill("#f87171") : pill("#fbbf24"); };
 const mono = { fontFamily: "ui-monospace, monospace", fontSize: 11 };
 const err = { color: "#f87171", fontSize: 13 };
 
@@ -49,6 +49,7 @@ function Investigate({ k, rows, setRows }) {
         st = await call(`/investigate/${alertId}/status`, k);
         if (st.disposition) break;
       }
+      if (!st?.disposition) throw new Error("timed out waiting for disposition (is the API + DB up?)");
       const pr = st.partial_results || {};
       const row = { alert: alertId, run: pr.run_id, disp: st.disposition,
         ml: J(pr.ml_scores) || {}, vr: J(pr.verifier_result) || {},
@@ -148,6 +149,7 @@ function Scenario({ k, rows, setRows }) {
         st = await call(`/scenario/${concern_id}/status`, k);
         if (st.scenarios_generated) break;
       }
+      if (!st?.set_id) throw new Error("timed out waiting for scenarios (is the API + DB up?)");
       const row = { concern, set: st.set_id, state: st.state, findings: J(st.challenger_findings) || [], exec: null };
       setRows((r) => [row, ...r]);
       setSel(row.set);
