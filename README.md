@@ -45,19 +45,27 @@ ScenarioLab (concern → approve → results). Manual click-through pending
 
 ## Measured results
 
-### Held-out ML (2026-10-16, PaySim account-first ledger, n=338 windows, group split by account)
+### Held-out ML (group split by account — no leakage)
 
-| Model | Features | P | R | F1 |
-|---|---|---|---|---|
-| LightGBM (shipped — held-out argmax) | flat + graph | 0.643 | 0.474 | **0.545** |
-| LightGBM | flat only | 0.600 | 0.474 | 0.529 |
-| HistGB | flat + graph | 0.500 | 0.421 | 0.457 |
-| HistGB | flat only | 0.600 | 0.474 | 0.529 |
+| Dataset | Model | Features | P | R | F1 |
+|---|---|---|---|---|---|
+| PaySim, n=338 | LightGBM (shipped — held-out argmax) | flat + graph | 0.643 | 0.474 | **0.545** |
+| PaySim, n=338 | LightGBM | flat only | 0.600 | 0.474 | 0.529 |
+| PaySim, n=338 | HistGB | flat + graph | 0.500 | 0.421 | 0.457 |
+| PaySim, n=338 | HistGB | flat only | 0.600 | 0.474 | 0.529 |
+| IBM HI-Small, n=4,982 | LightGBM | flat + graph | 0.630 | 0.408 | 0.495 |
+| IBM HI-Small, n=4,982 | LightGBM | flat only | 0.683 | 0.344 | 0.457 |
+| IBM HI-Small, n=4,982 | HistGB (held-out argmax for that run) | flat + graph | 0.619 | 0.416 | **0.498** |
+| IBM HI-Small, n=4,982 | HistGB | flat only | 0.627 | 0.336 | 0.438 |
 
-Graph lift: +0.016 for LightGBM, −0.07 for HistGB — test set is small (held-out n=85, 19 positives; recall 0.474 ≈ 9 of 19),
-so differences of this size are within noise.
-Shipped model = held-out argmax, recorded in `models/meta.json` + MLflow.
-Small data, modest scores, no leakage (split by account). No production claim.
+PaySim block 2026-10-16 (470 MB ledger, account-first). IBM block 2026-10-17:
+Kaggle HI-Small sample, account-first (400 laundering-touched + 1,500 clean
+accounts, seed 42, `scripts/load_ibm.py`), held-out n=1,246; multi-currency
+amounts kept as-is. Graph lift (PaySim): +0.016 for LightGBM, −0.07 for HistGB — test set is small (held-out n=85, 19 positives; recall 0.474 ≈ 9 of 19),
+so differences of this size are within noise. Shipped `models/` stays the PaySim
+held-out argmax (see `models/meta.json` + MLflow); the IBM run was isolated
+(`omniguard_ibm` DB, `mlruns_ibm`) and did not replace it. Small data, modest
+scores, no leakage. No production claim.
 
 ### 50 distinct cases, mock LLM (2026-10-16, Postgres, PaySim + synth)
 
