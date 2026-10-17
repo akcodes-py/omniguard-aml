@@ -279,6 +279,8 @@ function Scenario({ k, rows, setRows }) {
   const cur = rows.find((x) => x.set === sel) || rows[0];
   const results = cur?.exec?.results || {};
   const gaps = J(cur?.exec?.coverage_gaps) || [];
+  const fRaw = J(cur?.findings);
+  const fl = Array.isArray(fRaw) ? fRaw : Array.isArray(fRaw?.findings) ? fRaw.findings : fRaw ? [fRaw] : [];
 
   return (
     <>
@@ -331,6 +333,30 @@ function Scenario({ k, rows, setRows }) {
               </tr>
             ))}</tbody>
           </table>
+        )}
+        {cur && fl.length > 0 && (
+          <div className="border border-slate-800/80 rounded-lg p-4 mt-4">
+            <p className="text-xs font-semibold text-slate-200 mb-2">
+              Challenger findings <span className="font-normal text-slate-500">— adversarial review of the sealed set</span>
+            </p>
+            <ul className="text-[13px] text-slate-400 list-disc pl-5 space-y-1">
+              {fl.map((f, i) => (
+                <li key={i}>
+                  {typeof f === "string" ? f : f?.label_flip_arg != null || f?.leakage != null ? (
+                    <>
+                      <span className="font-mono text-slate-300">#{f.scenario_idx ?? i}</span>{" "}
+                      <span className="font-mono text-[11px] text-slate-400">[{f.verdict || "?"}]</span>{" "}
+                      {f.label_flip_arg || ""}
+                      {f.leakage ? ` · leakage: ${f.leakage}` : ""}
+                      {f.consistency ? ` · ${f.consistency}` : ""}
+                    </>
+                  ) : (
+                    JSON.stringify(f)
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
         {cur?.exec && (
           <div className="border border-slate-800/80 rounded-lg p-4 mt-4">

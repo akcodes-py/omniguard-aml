@@ -250,16 +250,15 @@ npm run dev
 ```
 Open **[http://localhost:5173](http://localhost:5173)** in your browser.
 
-- 🔑 **API Key & System Health**: Displays real-time status of backend models, active database dialect, and inference provider (`nim` or `mock`).
-- 🚨 **Alert Investigation Studio**:
-  - Live alert polling and disposition cards.
-  - Interactive SHAP feature importance charts.
-  - Citation verification badges linked to exact transaction IDs.
-  - Analyst signoff portal with concurrent review protection.
+- 🔑 **API Key & System Health**: Status badge — amber until the key is verified, green when connected — opens a key drawer that performs a real authenticated check (`GET /auth/check`) and shows live service status (queue backend and inference provider, `nim` or `mock`). The key is held in memory only, never persisted.
+- 🚨 **Alert Investigation Studio** (dispatch left, evidence ledger right):
+  - One-click presets from the seeded eval/demo alert set (`eval3-tp-00`, `eval3-inj-00`, `eval3-lik-00`, `alert-demo-rapid`).
+  - Live 1.5s status polling until the disposition lands; ledger rows carry the composite ML score, disposition, citation-verifier count, and token cost.
+  - Analyst signoff form (decision + notes) wired to the concurrency-protected review endpoint, with per-run raw evidence. Session record counts and last API-call latency show in each ledger footer.
 - 🧪 **ScenarioLab Workbench**:
   - Submit plain-English compliance concerns (e.g. *"Smurfing via micro-deposits under $10,000 threshold"*).
-  - Inspect generated Pydantic specs, review adversarial challenger critiques, and verify SHA-256 sealed expectations.
-  - Execute 48-hour passthrough controls and inspect automated gap/diff reports.
+  - Review adversarial challenger findings, then approve the SHA-256-locked scenario set to execute the control.
+  - Inspect match / miss / over-alert results, the coverage-gap report ("What was NOT tested"), and the evidence-pack hash.
 
 ---
 
