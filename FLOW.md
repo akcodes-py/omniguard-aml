@@ -7,7 +7,7 @@ All app code lives in `src/omniguard/`; `scripts/` are entry points.
 
 | Module | Owns | Calls into |
 |---|---|---|
-| `config.py` | `settings` (env: DATABASE_URL, REDIS_URL, MOCK_LLM, API_KEY, thresholds) | — |
+| `config.py` | `settings` (env: DATABASE_URL, REDIS_URL, LLM_PROVIDER, API_KEY, thresholds) | — |
 | `db.py` | dialect switch, `connect()`, `init_db()`, `t()` table names, `dumps/loads` | `config.settings`, `db/schema_*.sql` |
 | `injection.py` | `scan_transaction()`, `sandbox()` | — (pure) |
 | `features.py` | `compute_features()` | — (pure) |
@@ -15,7 +15,7 @@ All app code lives in `src/omniguard/`; `scripts/` are entry points.
 | `ml.py` | `to_vector()`, `train()`, `load()`, `score()`, `explain()` | `config.settings`, `./models/*.pkl` |
 | `policy_retrieval.py` | `retrieve()`, `pseudo_embed()` | `db.connect()`, `config.settings` |
 | `prompts.py` | 4 templates, `prompt_version_hash()` | — (pure) |
-| `llm.py` | `call_json(kind, payload)` mock-or-Bedrock | `config.settings`, `prompts.prompt_version_hash()` |
+| `llm.py` | `call_json(kind, payload)` — mock / NIM / Bedrock | `config.settings`, `prompts.prompt_version_hash()` |
 | `verifier.py` | `verify_citations()`, `adjudicate()` | `config.settings` (thresholds) |
 | `scenario_gen.py` | `generate_transactions()`, `sha256()`, `lock_expectations()`, `execute_control_48h_passthrough()`, `compare()` | — (pure) |
 | `graphs_investigation.py` | Graph 1: `run_investigation()`, `review()`, `fetch_alert()`, `build_langgraph()` | features, graph_features, injection, ml, policy_retrieval, llm, verifier, db |
@@ -40,7 +40,7 @@ Client
             │       ml.explain() → SHAP (or weight approx)
             ├─ [N3] policy_retrieval.py:retrieve(tags) → DB: policy_notes (top 3–5, current only)
             ├─ [N4a‖N4b] asyncio.gather → llm.py:call_json("investigator") ‖ call_json("challenger")
-            │       (mock or boto3 bedrock InvokeModel; prompts.py:prompt_version_hash() logged)
+            │       (mock / NIM dual-chain / Bedrock InvokeModel; prompts.py:prompt_version_hash() logged)
             ├─ [N5] verifier.py:verify_citations(tx_ids ✓, policy currency ✓, numerics ✓)
             │       verifier.py:adjudicate(composite, exoneration, valid, quarantined)
             │       → RECOMMEND_ESCALATE | RECOMMEND_CLOSE | CONFLICT_HUMAN_REVIEW
@@ -93,13 +93,13 @@ scripts/train.py:main()
  ├─ ml.py:to_vector() → X, label = any tx.is_laundering
  ├─ ml.py:train(X, y): LightGBM (or HistGB fallback) + IsolationForest
  │   → ./models/{supervised.pkl, isoforest.pkl, meta.json} + MLflow run
- └─ prints in-sample P/R/F1 (honest in-sample, not held-out)
+ └─ prints held-out P/R/F1 (GroupShuffleSplit by account — D20)
 ```
 
 ## Flow 4 — Evaluate (Phases 3–4)
 
 ```
-scripts/eval50.py → 50× graphs_investigation.run_investigation(demo alerts)
+scripts/eval50_v2.py → 50 distinct cases (eval3 set) → run_investigation per case
   → citation fidelity, numeric accuracy, injection 5/5, TP recall, TN ok → MLflow
 scripts/baselines.py → flat-only vs flat+graph F1 (HistGB both arms)
   → single-LLM (investigator alone) vs dual-pipeline FPR → MLflow
@@ -108,7 +108,7 @@ scripts/baselines.py → flat-only vs flat+graph F1 (HistGB both arms)
 ## Cross-cutting paths
 
 - **Config:** every module reads `config.py:settings` (env-overridable; "`./data/omniguard.db`",
-  `MOCK_LLM=true` defaults). `db.py:is_postgres()` + `t()` switch SQL dialect per call.
+  `LLM_PROVIDER=mock` defaults). `db.py:is_postgres()` + `t()` switch SQL dialect per call.
 - **Auth:** `api.py:require_key()` (X-API-Key) gates every route except `/health`.
 - **Seeding:** `scripts/seed.py` → `db.init_db()` (DDL) → INSERT accounts/transactions/
   `policy_notes` (with `policy_retrieval.pseudo_embed`) → demo alerts (+1 injection tx).

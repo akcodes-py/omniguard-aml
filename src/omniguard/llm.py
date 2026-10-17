@@ -1,7 +1,7 @@
 """LLM access: mock | NVIDIA NIM | Bedrock, with strict JSON + throttling.
 
 Routing (dual-model):
-- investigator, scenario_author -> NIM_REASON_MODEL (DeepSeek-V4.1-Flash)
+- investigator, scenario_author -> NIM_REASON_MODEL (Nemotron Super-120B)
 - challenger, scenario_challenger -> NIM_FAST_MODEL (Nemotron 3.5 Lightning)
 - provider "bedrock" keeps the legacy Claude path; "mock" (default) is the
   deterministic offline stand-in with identical JSON schemas.
@@ -270,11 +270,13 @@ def _stream_complete(client, *, model: str, messages: list[dict],
 
 
 def _chain_for(kind: str) -> list[str]:
-    """Primary model first, 70B fallback for the reasoning kinds (audit-logged).
+    """Primary model first, Lightning-30B fallback for the reasoning kinds
+    (audit-logged).
 
-    Investigator and challenger currently share the Lightning brain (free-tier
-    pragmatism — 552B is unservable). Independence loss is limited: the
-    challenger is evidence-gated (rule check on DB fields), not open reasoning.
+    Investigator/author primary runs on Super-120B; challengers and the
+    fallback run on Lightning-30B (552B dropped — unservable on the free
+    tier; D18). Independence loss is limited: the challenger is
+    evidence-gated (rule check on DB fields), not open reasoning.
     """
     primary = _model_for(kind)
     if kind in REASON_KINDS and settings.NIM_FALLBACK_MODEL != primary:

@@ -14,7 +14,7 @@ Consequence: satisfies both docs; no migration needed either way.
 ### D2. Embedding dim frozen at 1024 (Titan v2), HNSW — ACCEPTED
 Context: PRD assumed 1536 (OpenAI), starter used 1024 (Titan v2).
 Decision: keep 1024 + HNSW per starter; recorded in `config.EMBEDDING_DIM`.
-Consequence: PRD Â§4 text is stale on this point; update it if OpenAI
+Consequence: PRD §4 text is stale on this point; update it if OpenAI
 embeddings are ever adopted (requires re-embed + index rebuild).
 
 ### D3. Table name `policy.policy_notes`, field `body` — ACCEPTED
@@ -38,7 +38,7 @@ Consequence: `seed --reset` cannot DELETE — it rebuilds the SQLite file
 ### D6. Added missing PRD tables — ACCEPTED
 `core.graph_features`, `audit.model_promotions`, full `scenario.*`
 (risk_concerns, scenario_sets, expected_outcomes, control_runs).
-Consequence: DDL diff vs PRD Â§4 = 0 (table-level).
+Consequence: DDL diff vs PRD §4 = 0 (table-level).
 
 ### D7. Local runtime fallbacks (no Docker on host) — ACCEPTED
 SQLite + in-process queue + mock LLM + file-based MLflow locally;
@@ -58,7 +58,7 @@ counts estimated; live path auto-falls-back to mock on any exception.
 Consequence: CI/eval cost = 0; single-vs-dual baseline ties 0.0/0.0 on mock
 (reported honestly — real differentiation needs Bedrock).
 
-### D10. Single parallel LLM pass, boolean adjudicator — ACCEPTED (PRD Â§12)
+### D10. Single parallel LLM pass, boolean adjudicator — ACCEPTED (PRD §12)
 No multi-round debate, no LLM judge, no LLM math, no Text-to-SQL,
 no transaction vector search, never auto-close.
 Consequence: enforced in `verifier.py`; eval asserts it.
@@ -68,7 +68,7 @@ This SQLite build rejects `BEFORE UPDATE OR DELETE`; each guard table got
 two single-event triggers. Postgres canonical keeps combined triggers.
 Consequence: dev-only DDL quirk, documented in `db/schema_sqlite.sql`.
 
-### D12. Eval reuses 3 seeded alerts (honest smoke eval) — ACCEPTED
+### D12. Eval reuses 3 seeded alerts (honest smoke eval) — SUPERSEDED (see D21: 50 distinct cases; PaySim later ingested — D20)
 50 runs, not 50 distinct cases; no PaySim/IBM ingestion locally.
 Consequence: metrics (citation 1.000 etc.) prove plumbing, not production
 accuracy. Do not cite them as production claims.
@@ -82,7 +82,7 @@ JEV removed from scope per owner call — no JEV keys, no JEV client.
 ### D14. Phase 2: lean Docker on 8GB, PG18 coexistence — ACCEPTED (2026-10-16)
 Host Postgres 18 owns port 5432 (service left running, untouched — stopping
 needs admin). Container remapped to host **5433** (`DATABASE_URL`
-`postgresql://omniguard@â€¦:5433/omniguard`); compose `api/worker/mlflow`
+`postgresql://omniguard@…:5433/omniguard`); compose `api/worker/mlflow`
 moved to `full` profile — default `up` runs postgres+redis only (~350MB).
 WSL2 capped at 3GB via `.wslconfig`. Redis must use `127.0.0.1` (Docker
 proxy doesn't answer `::1`; redis-py has no Happy-Eyeballs fallback).
@@ -91,9 +91,9 @@ for PG boolean cols; `Vector.to_list()` for pgvector reads; `text[]` gets
 a real list. Verified: 16/16 on Postgres AND SQLite, ARQ burst→audit row,
 HNSW top-4 identical to numpy fallback.
 
-### D15. Phase 3: NIM dual-routing, mock-verified, key pending — ACCEPTED (2026-10-16)
+### D15. Phase 3: NIM dual-routing, mock-verified, key pending — SUPERSEDED (final routing: see D18 note + README Models line)
 `llm.py` provider switch (`mock|nim|bedrock`); Investigator/Author →
-`NIM_REASON_MODEL` (DeepSeek-V4.1-Flash), Challengers → `NIM_FAST_MODEL`
+`NIM_REASON_MODEL` (DeepSeek-V4.1-Flash; final = `nvidia/nemotron-3-super-120b-a12b`, see README Models), Challengers → `NIM_FAST_MODEL`
 (Nemotron 3.5 Lightning); temperature 0, `response_format json_object`,
 schema validation + repair retry, 429/backoff, per-provider pacing at
 `RATE_LIMIT_PER_MIN`; real `usage` tokens into `token_cost`; STRICT raises,
@@ -116,7 +116,7 @@ ChatCompletionChunk; a matrix-probe pop() bug of mine briefly suggested
 otherwise — probe bug, not SDK bug — caught and documented, not hidden).
 28/28 pass (incl. idle-enforcement + idle-to-fallback offline tests).
 
-### D18. Investigator promoted to Lightning, fallback Super-120B — ACCEPTED (2026-10-16)
+### D18. Investigator promoted to Lightning, fallback Super-120B — SUPERSEDED (see note below: final = Super-120B primary, Lightning fallback)
 552B dropped from the chain (free tier serves keep-alives, never tokens).
 Primary investigator/author = Lightning-30B (proven live); fallback =
 `nvidia/nemotron-3-super-120b-a12b` (proven invocable in 2s). Rejected
@@ -134,7 +134,7 @@ rejected-candidates list and fallback-logging design above still stand.
 GroupShuffleSplit by account (no leakage). Final ledger (n=338, account-first
 PaySim): LightGBM flat_graph F1 0.545 vs flat_only 0.529 (graph +0.016 —
 negligible); HistGB 0.457/0.529. Shipped = held-out argmax (LightGBM;
-`ml.train(family=â€¦)`), recorded in models/meta.json + MLflow. (An earlier
+`ml.train(family=…)`), recorded in models/meta.json + MLflow. (An earlier
 thin-sample round showed HistGB 0.833 — voided with the dataset that
 produced it; ID-collision across loads silently measured stale windows,
 fixed by per-generation namespaces ps2/eval3.)
@@ -186,8 +186,9 @@ mode" — v2 should migrate to `sqlite:///mlflow.db` or the compose server.
 ## Proposed (v2 Roadmap)
 
 ### P1. Dedicated Production LLM Endpoints — PROPOSED
-Call: Set MOCK_LLM=false with dedicated NIM or AWS Bedrock Claude 3.5 Sonnet
-endpoints for high-volume production throughput beyond free-tier rate limits.
+Call: Set `LLM_PROVIDER=nim` (dedicated NIM) or `LLM_PROVIDER=bedrock` (AWS
+Bedrock Claude 3.5 Sonnet) for high-volume production throughput beyond
+free-tier rate limits.
 
 ### P2. Canonical Deploy Verification — PROPOSED
 Call: Run full multi-container stack (api, worker, postgres+pgvector, redis, mlflow)

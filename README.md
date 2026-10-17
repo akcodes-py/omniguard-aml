@@ -4,6 +4,10 @@ Dual-pipeline financial-crime compliance platform (per `omniguard_product_plan.m
 **upstream ScenarioLab** (control stress-testing with SHA-256-locked expected outcomes)
 + **downstream investigation** (ML-scored, LLM-investigated, citation-verified alert triage).
 
+**Models:** NVIDIA NIM — `nvidia/nemotron-3-super-120b-a12b` (investigator + scenario author; primary) · `nvidia/nemotron-3.5-lightning-30b-a3b` (challengers + fallback) · local default `LLM_PROVIDER=mock`.
+
+Built in about two days (2026-10-15 → 17) — see [FLOW.md](FLOW.md) for the execution flow and [DECISIONS.md](DECISIONS.md) for the decision log.
+
 ## Quickstart (local, no Docker)
 
 ```powershell
@@ -16,9 +20,10 @@ python scripts/eval50_v2.py --prefix eval3   # needs Postgres up (docker compose
 $env:PYTHONPATH='src'; uvicorn omniguard.api:app --port 8000  # repo root so .env loads
 ```
 
-Docker compose (`docker-compose.yml`, 5 services: api, worker, postgres+pgvector,
-redis, mlflow) is the canonical deployment; local defaults use SQLite +
-in-process queue + mock LLM so everything runs on this machine.
+Docker compose ships 5 services (`docker-compose.yml`: api, worker, postgres+pgvector,
+redis, mlflow). Postgres and Redis were verified live; the full api/worker/mlflow
+stack has not been run end-to-end on this machine (D7, D14, P2). Local defaults
+use SQLite + in-process queue + mock LLM so everything runs here.
 
 ## Architecture
 
@@ -49,7 +54,8 @@ ScenarioLab (concern → approve → results). Manual click-through pending
 | HistGB | flat + graph | 0.500 | 0.421 | 0.457 |
 | HistGB | flat only | 0.600 | 0.474 | 0.529 |
 
-Graph lift: +0.016 for LightGBM, −0.07 for HistGB — negligible at this N.
+Graph lift: +0.016 for LightGBM, −0.07 for HistGB — test set is small (held-out n=85, 19 positives; recall 0.474 ≈ 9 of 19),
+so differences of this size are within noise.
 Shipped model = held-out argmax, recorded in `models/meta.json` + MLflow.
 Small data, modest scores, no leakage (split by account). No production claim.
 
@@ -63,17 +69,23 @@ Small data, modest scores, no leakage (split by account). No production claim.
 | Boundary | 10 | 0 | 7 | 3 | 1.000 | — |
 | Injection | 5 | 0 | 0 | 5 | 1.000 | 1.000 |
 
-Reads: fraud is never closed (4 escalated, 11 human-reviewed); clean is
-mostly closed; injection always quarantined + human-reviewed. The 1
-quarantined lookalike is a regex FP on a benign memo (logged, tolerated —
-quarantine only forces review). Overall citation 1.000.
+- Citation 1.000 holds by construction, because the mock emits valid IDs.
+- Injection quarantine was tested on 5 hand-written memos.
+- Challenger exoneration uses random KYC, so it carries no signal (D21).
+
+Reads: only 4 of 15 true positives were escalated — the other 11 went to
+human review, so fraud is never auto-closed; clean is mostly closed;
+injection always quarantined + human-reviewed. The 1 quarantined lookalike
+is a regex FP on a benign memo (logged, tolerated — quarantine only forces
+review). Overall citation 1.000.
 
 ### Live NIM smoke (2026-10-16, Postgres, Super-120B + Lightning-30B, n=6)
 
 Citation 0.667 (2 title-instead-of-id cites → human review, as designed),
-injection 1/1, dual escalate 0/6 (toy scorer era — superseded by the tables
-above), single-LLM FP 3/3 on clean, tokens dual 12.7k vs single 9.9k.
-One challenger mock-degrade under congestion (logged).
+injection 1/1, tokens dual 12.7k vs single 9.9k, one challenger mock-degrade
+under congestion (logged). Escalation counts: plumbing check only, not a
+quality comparison (toy scorer returned a constant 0.2913; the single/dual
+arms had different n — D19).
 
 ### The honest caveat (read before quoting anything)
 Small data (338 windows), modest scorer (F1 0.545), free-tier congestion.
@@ -93,6 +105,7 @@ numbers, not the architecture.
 
 - **Ledger Size & ML Scorer:** Scorer trained on 338 account windows (PaySim group split) achieving held-out F1 of 0.545. Validated against data leakage, but serves as a pipeline prototype rather than a production enterprise model.
 - **Inference Free-Tier Congestion:** Free-tier NVIDIA NIM endpoints suffer intermittent latency and queue throttling; graceful degrade and fallback to fast models (Lightning-30B / deterministic mock) are implemented and logged.
+- **Bedrock:** alternate provider path is written (`LLM_PROVIDER=bedrock` in `llm.py`) but not tested live; NIM + mock are the exercised paths.
 - **Scope Boundaries:** No direct external wire network feeds, Kafka infrastructure, or GNNs are included in this v1 milestone (see v2 roadmap).
 
 ## Refusals enforced
