@@ -129,6 +129,15 @@ Evaluated across PaySim and IBM AML synthetic benchmark ledgers with strict grou
 - **Token Efficiency**: Dual agent consumed ~12.7k tokens vs ~9.9k tokens for single agent.
 - **Failover Verification**: Congested Super-120B requests safely downgraded to Lightning-30B with `fallback: true` logged in audit table.
 
+### 4. End-to-End Pipeline Benchmarks (`HI-Small` Dataset)
+
+| Pipeline Stage | Details / Scope | Wall Time |
+| :--- | :--- | :--- |
+| **1. Data Acquisition** | Kaggle download of IBM AML `HI-Small` dataset (454 MiB) | `~65s` |
+| **2. DB Ingestion** | Bulk load of 53,785 transactions into isolated `omniguard_ibm` PostgreSQL DB | `~128s` |
+| **3. Model Training** | CPU-bound model fitting & MLflow tracking across ~5,000 sliding windows | *Variable (CPU-bound)* |
+| **4. Verification & CI** | Byte-verification/restore of `models/`, docs update, Git commit, and 32-test `pytest` suite | `~36s` |
+
 ### ⚠️ The Honest Engineering Caveat
 > **Read Before Quoting:** Evaluated on realistic synthetic ledgers (338 windows for PaySim, 4,982 transactions for IBM HI-Small) and free-tier NVIDIA NIM endpoints. The pipeline logic is strictly verified (fraud never auto-clears, citations enforced, injection quarantined). Shipped models represent prototype compliance pipelines rather than a calibrated enterprise-scale deployment.
 

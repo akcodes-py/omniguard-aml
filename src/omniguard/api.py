@@ -34,6 +34,11 @@ def health() -> dict:
                                          "llm": settings.LLM_PROVIDER}}
 
 
+@app.get("/auth/check")
+def auth_check(_: None = Depends(require_key)) -> dict:
+    return {"status": "ok", "auth": "valid"}
+
+
 @app.post("/investigate/{alert_id}", status_code=202)
 async def investigate(alert_id: str, _: None = Depends(require_key)) -> dict:
     job_id = await q.enqueue_investigation(alert_id)

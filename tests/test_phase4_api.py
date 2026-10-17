@@ -16,6 +16,8 @@ def _client():
 def test_health_and_auth():
     c = _client()
     assert c.get("/health").status_code == 200
+    assert c.get("/auth/check").status_code == 401  # no key
+    assert c.get("/auth/check", headers=HEADERS).status_code == 200
     assert c.post("/investigate/x").status_code == 401  # no key
     assert c.post("/investigate/x", headers=HEADERS).status_code == 202
 
