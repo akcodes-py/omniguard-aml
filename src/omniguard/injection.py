@@ -7,7 +7,10 @@
 """
 from __future__ import annotations
 
+import html
 import re
+import unicodedata
+from typing import Any, Dict
 
 INJECTION_PATTERNS = [
     r"(?i)ignore\s+(previous|all|above)",
@@ -16,28 +19,41 @@ INJECTION_PATTERNS = [
     r"(?i)disregard",
     r"(?i)override",
     r"(?i)new\s+instructions?",
+    r"(?i)<\s*/?\s*untrusted_transaction_memo\s*>",
 ]
-_COMPILED = [re.compile(p) for p in INJECTION_PATTERNS]
 
-UNTRUSTED_FIELDS = ("memo", "counterparty_name")
+ZERO_WIDTH_RE = re.compile(r"[\u200b-\u200d\ufeff]")
+
+
+def _normalize_for_scan(text: str) -> str:
+    """Normalize Unicode homoglyphs and strip zero-width characters before regex check."""
+    normalized = unicodedata.normalize("NFKC", text or "")
+    return ZERO_WIDTH_RE.sub("", normalized)
 
 
 def scan_text(value: str | None) -> bool:
     if not value:
         return False
-    return any(rx.search(value) for rx in _COMPILED)
+    scan_val = _normalize_for_scan(str(value))
+    return any(re.search(p, scan_val) for p in INJECTION_PATTERNS)
 
 
-def sandbox(tag: str, value: str | None) -> str:
-    # Escape so a memo containing a closing tag cannot break out of the
-    # untrusted boundary (prompt-injection hardening).
-    v = value or ""
-    v = v.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    return f"<untrusted_{tag}>{v}</untrusted_{tag}>"
+def sandbox(raw_memo: str | None, tag: str = "untrusted_transaction_memo") -> str:
+    """Escape XML/HTML delimiters so untrusted input can never break out of the sandbox tag."""
+    safe_text = html.escape(raw_memo or "", quote=True)
+    return f"<{tag}>{safe_text}</{tag}>"
 
 
-def scan_transaction(tx: dict) -> dict:
-    """Return {flagged_fields, quarantined, sanitized} — raw values preserved in tx."""
-    flagged = [f for f in UNTRUSTED_FIELDS if scan_text(tx.get(f))]
-    sanitized = {f: sandbox("transaction_memo" if f == "memo" else f, tx.get(f)) for f in UNTRUSTED_FIELDS}
-    return {"flagged_fields": flagged, "quarantined": bool(flagged), "sanitized": sanitized}
+def scan_transaction(tx: Dict[str, Any]) -> Dict[str, Any]:
+    """Scan all untrusted transaction text fields (memo + counterparty_name) without mutating raw values."""
+    flagged_fields = []
+    for field in ("memo", "counterparty_name"):
+        raw_val = str(tx.get(field) or "")
+        scan_val = _normalize_for_scan(raw_val)
+        if any(re.search(p, scan_val) for p in INJECTION_PATTERNS):
+            flagged_fields.append(field)
+
+    return {
+        "quarantined": len(flagged_fields) > 0,
+        "flagged_fields": flagged_fields,
+    }

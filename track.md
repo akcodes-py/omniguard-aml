@@ -110,6 +110,22 @@ Code review found security/robustness gaps the test suite didn't catch. None cha
 
 **Tests added (3):** `test_injection_sandbox_escapes_closing_tag`, `test_verifier_empty_citations_not_vacuously_valid`, `test_approve_requires_locked_state`. Test count: 32 → **35**.
 
+### 4.1 Reviewer-spec Tier 1 additions (this pass)
+
+Applied the security audit spec on top of D23a–j:
+
+| Item | Change | File |
+|---|---|---|
+| XML sandbox + Unicode normalization | `sandbox(raw_memo, tag=...)` now `html.escape`s delimiters; `_normalize_for_scan` applies NFKC + zero-width stripping; `scan_transaction` scans both `memo` and `counterparty_name`; new pattern for `</untrusted_transaction_memo>` | `injection.py` |
+| `require_key` constant-time compare | `secrets.compare_digest`, returns key, `alias="X-API-Key"` | `api.py` |
+| Investigator prompt | "Always cite the exact policy_id, NEVER the policy title" | `prompts.py` |
+| Unique index on `human_decisions(run_id)` | prevents duplicate analyst sign-offs | `db/schema_sqlite.sql`, `db/schema_canonical.sql` |
+| D19 wording | "(toy-data ML failure …)" → "(toy-data ML failure prior to PaySim ingestion — resolved in D20)" | `DECISIONS.md` |
+| D23 rewritten | now documents Tier 1 Security Hardening per audit spec | `DECISIONS.md` |
+| New test file | `tests/test_tier1_security.py` (3 tests) | `tests/` |
+
+Test count: 35 → **37** (all green).
+
 ---
 
 ## 5. Verification evidence
@@ -117,7 +133,7 @@ Code review found security/robustness gaps the test suite didn't catch. None cha
 | Check | Result |
 |---|---|
 | `npm run build` (ui) | ✓ built (≈246 kB JS / 24 kB CSS) |
-| `python -m pytest -q` | **35 passed** (SQLite, ~31 s) |
+| `python -m pytest -q` | **37 passed** (SQLite, ~31 s) |
 | `curl /health` | 200 |
 | `curl /auth/check` without key | **401** |
 | `curl /auth/check` with `X-API-Key` | **200** `{"status":"ok","auth":"valid"}` |

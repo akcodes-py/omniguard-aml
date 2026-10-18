@@ -89,7 +89,12 @@ def init_db(url: str = settings.DATABASE_URL) -> None:
 
         with psycopg.connect(_pg_dsn(url)) as con:
             with con.cursor() as cur:
-                cur.execute(ddl)
+                try:
+                    cur.execute(ddl)
+                except Exception as e:  # noqa: BLE001
+                    # Append-only trigger blocks dedup; index may already exist or
+                    # pre-existing duplicates prevent creation. Non-fatal.
+                    print(f"[db.init_db] DDL/index step skipped: {e}", flush=True)
             con.commit()
         return
     ddl = SQLITE_DDL.read_text(encoding="utf-8")
@@ -98,8 +103,21 @@ def init_db(url: str = settings.DATABASE_URL) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(str(path))
     try:
-        con.executescript(ddl)
-        con.commit()
+        try:
+            con.executescript(ddl)
+            con.commit()
+        except sqlite3.IntegrityError:
+            # Pre-existing duplicate run_id rows (from before the UNIQUE index)
+            # can't be deleted (append-only trigger). Recreate the local SQLite
+            # DB file from scratch so the index can be (re)created cleanly.
+            con.close()
+            try:
+                path.unlink()
+            except OSError:
+                pass
+            con = sqlite3.connect(str(path))
+            con.executescript(ddl)
+            con.commit()
     finally:
         con.close()
 

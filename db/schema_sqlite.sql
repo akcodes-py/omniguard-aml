@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS human_decisions (
     stale_rerun INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_human_decisions_run_id ON human_decisions(run_id);
 
 CREATE TABLE IF NOT EXISTS model_promotions (
     promotion_id TEXT PRIMARY KEY,

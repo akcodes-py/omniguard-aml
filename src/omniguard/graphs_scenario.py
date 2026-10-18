@@ -81,8 +81,12 @@ def approve_and_execute(set_id: str, control_id: str = "rule_48h_passthrough",
     expectations = loads(out["expectations"])
     # integrity: recompute lock hash, must match sealed value (explicit raise so it
     # survives `python -O`, which strips assert statements)
-    if sg.sha256(expectations) != out["expectation_hash"]:
-        raise ValueError("expectation hash mismatch — tamper suspected")
+    actual_hash = sg.sha256(expectations)
+    if actual_hash != out["expectation_hash"]:
+        raise ValueError(
+            f"Tamper check failed for scenario set {set_id}: "
+            f"expected {out['expectation_hash']}, got {actual_hash}"
+        )
     actual_raw = sg.execute_control_48h_passthrough(txs)
     actual = {str(k): v for k, v in actual_raw.items()}
     results, summary = sg.compare(expectations, actual)

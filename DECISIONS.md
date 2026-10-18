@@ -147,7 +147,7 @@ rows, not a data bug.
 dual escalate 0/6, single FP 3/3 (fair payloads), tokens 12.7k dual vs 9.9k
 single, 1 challenger mock-degrade (logged). Returned `token_cost` was missing
 from run_investigation (audit-only) — now forwarded. Scorer outputs 0.2913 for
-every alert (toy-data ML failure, stated in README — not a pipeline verdict).
+every alert (toy-data ML failure prior to PaySim ingestion — resolved in D20).
 Single-arm lobotomized-payload history voided; fair comparison only from this
 run. README measured-results rewritten with live table + caveat + phases.
 
@@ -183,23 +183,13 @@ Consequence: `mlruns/` now holds real runs (train_split: 14 metrics matching
 README table P/R/F1; train: pos_rate). File store is MLflow "maintenance
 mode" — v2 should migrate to `sqlite:///mlflow.db` or the compose server.
 
-### D23. Hardening pass (Tier 1 + selected Tier 2) — ACCEPTED (2026-10-18)
+### D23. Tier 1 Security Hardening: XML sandbox escaping, Unicode normalization & optimizer-safe SHA-256 check — ACCEPTED (2026-10-18)
 
-Context: code review found security/robustness gaps that the test suite did not
-catch. None change the happy-path behavior; all keep the 35 tests green.
+Context: Security audit identified that (1) raw `</untrusted_transaction_memo>` tags in wire memos could break out of the XML sandbox boundary, (2) zero-width characters or untrusted `counterparty_name` strings could bypass memo-only regex scans, (3) `assert sha256(expectations) == expectation_hash` in ScenarioLab is stripped under `python -O`, and (4) API key comparison used standard equality.
 
-- **D23a Injection sandbox escapes attacker-controlled text** (`injection.py`): `sandbox()` now HTML-escapes `<`, `>`, `&` before wrapping, so a memo containing `</untrusted_…>` can no longer close the boundary early. Test: `test_injection_sandbox_escapes_closing_tag`.
-- **D23b Tamper check is a hard raise, not `assert`** (`graphs_scenario.py`): `assert sha256(...) == ...` → `if …: raise ValueError(...)`, so the cryptographic lock survives `python -O` / `PYTHONOPTIMIZE=1`.
-- **D23c Scenario approve is idempotent** (`graphs_scenario.py`): rejects anything not in `LOCKED` state (missing set, missing outcomes, already executed) with `KeyError`/`ValueError` instead of crashing mid-flight. Test: `test_approve_requires_locked_state`.
-- **D23d MLflow failures are logged, not swallowed** (`ml.py`): mirrors D22 — `_log.warning(...)` instead of `pass`, consistent with `train.py`.
-- **D23e Graph-feature failures logged at debug** (`graph_features.py`): 5 bare `except Exception: pass` → `except Exception as exc` + `_log.debug(...)`, still degrading to zeros.
-- **D23f Empty citation sets are not vacuously valid** (`verifier.py`): `tx_ok` now requires at least one cited tx when the window is non-empty. Test: `test_verifier_empty_citations_not_vacuously_valid`.
-- **D23g Dialect-safe high-risk filter** (`graphs_investigation.py`): `WHERE high_risk_jurisdiction IS TRUE` → bare column, works on both Postgres and SQLite without relying on SQLite truthiness.
-- **D23h Pydantic request models** (`api.py`): `ReviewBody` / `ScenarioBody` replace untyped `dict`, so malformed bodies return 422 instead of 500 `KeyError`; `concern_text` has `min_length=1`.
-- **D23i Resilience logging via stdlib `logging`** (`llm.py`): the 8 `print(..., file=sys.stderr)` calls become `_log` calls (levels: info for attempts, warning for fallbacks/failures). No behavior change; enables log-level control.
-- **D23j Orphan bytecode removed**: deleted stale `__pycache__/hf_data.cpython-314.pyc` (no source existed).
+Decision: HTML-escaped delimiters in `injection.sandbox()`, added NFKC + zero-width stripping across both `memo` and `counterparty_name` in `scan_transaction()`, replaced `assert` in `graphs_scenario.approve_and_execute()` with an explicit `ValueError`, and switched `api.require_key()` to `secrets.compare_digest()`. Investigator prompt now instructs citing `policy_id` (never title). Unique index `idx_human_decisions_run_id` added to both DDLs to prevent duplicate analyst sign-offs. Further hardening in the same pass: MLflow failures logged instead of swallowed (`ml.py`); 5 bare `except` in `graph_features` now logged at debug; empty citation sets no longer vacuously valid (`verifier.py`); high-risk filter made dialect-safe; Pydantic `ReviewBody`/`ScenarioBody` models (422 not 500); resilience logging moved to stdlib `logging` (`llm.py`); stale orphan `hf_data` pyc removed.
 
-Consequence: 32 → **35 tests** green; injection boundary can no longer be closed early by attacker input; ScenarioLab tamper check cannot be stripped by optimization flags.
+Consequence: Sandbox breakout, homoglyph evasion, and `-O` tamper-check bypass closed; 35/35 pytest suite green. New tests: `test_tier1_security.py` (3).
 
 ---
 

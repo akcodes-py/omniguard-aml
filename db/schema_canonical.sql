@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS audit.human_decisions (
     stale_rerun   boolean NOT NULL DEFAULT FALSE,
     created_at    timestamptz NOT NULL DEFAULT now()
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_human_decisions_run_id ON audit.human_decisions(run_id);
 
 CREATE TABLE IF NOT EXISTS audit.model_promotions (
     promotion_id       uuid PRIMARY KEY DEFAULT gen_random_uuid(),

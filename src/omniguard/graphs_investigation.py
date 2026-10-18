@@ -138,7 +138,7 @@ async def node_fetch_and_sanitize(state: InvestigationState) -> dict:
         "flagged_fields": [s["flagged_fields"] for s in scans if s["flagged_fields"]],
         "quarantined": quarantined,
     }
-    memos = [inj.sandbox("transaction_memo", tx.get("memo")) for tx in txs]
+    memos = [inj.sandbox(tx.get("memo"), tag="transaction_memo") for tx in txs]
 
     return {
         "alert": alert, "account": acct, "txs": txs,

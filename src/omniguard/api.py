@@ -5,6 +5,8 @@ Heavy work runs in worker/fallback queue — routes never block on LLM/ML.
 """
 from __future__ import annotations
 
+import secrets
+
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -24,9 +26,10 @@ app.add_middleware(
 )
 
 
-def require_key(x_api_key: str = Header(default="")) -> None:
-    if x_api_key != settings.API_KEY:
-        raise HTTPException(status_code=401, detail="invalid API key")
+def require_key(x_api_key: str = Header(default="", alias="X-API-Key")) -> str:
+    if not x_api_key or not secrets.compare_digest(x_api_key, settings.API_KEY):
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+    return x_api_key
 
 
 class ReviewBody(BaseModel):

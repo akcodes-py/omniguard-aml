@@ -47,7 +47,7 @@ async def one(category: str, alert_id: str) -> dict:
     single_payload = {"facts": f, "tx_ids": tx_ids,
                       "policy_ids": [[p["policy_id"], p["version"]] for p in policies],
                       "policies": [p["title"] for p in policies],
-                      "memos": [inj.sandbox("transaction_memo", tx.get("memo")) for tx in bundle["txs"]]}
+                      "memos": [inj.sandbox(tx.get("memo"), tag="transaction_memo") for tx in bundle["txs"]]}
     inv, inv_tc = llm.call_json("investigator", single_payload)
     vr = res.get("verifier_result", {})
     dual_tc = res.get("token_cost", {})
