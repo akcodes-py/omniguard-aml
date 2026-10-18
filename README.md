@@ -5,7 +5,7 @@
 
 *Bridging Upstream Control Stress-Testing with Downstream Citation-Grounded Autonomous Investigation*
 
-[![Tests](https://img.shields.io/badge/pytest-32%20passed-success?style=for-the-badge&logo=pytest&logoColor=white)](#-measured-results)
+[![Tests](https://img.shields.io/badge/pytest-37%20passed-success?style=for-the-badge&logo=pytest&logoColor=white)](#-measured-results)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue?style=for-the-badge&logo=python&logoColor=white)](#-quickstart-local-no-docker)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](#-system-architecture)
 [![NVIDIA NIM](https://img.shields.io/badge/NVIDIA%20NIM-Nemotron--3-76B900?style=for-the-badge&logo=nvidia&logoColor=white)](#-models--inference)
@@ -103,10 +103,10 @@ Evaluated across PaySim and IBM AML synthetic benchmark ledgers with strict grou
 | **PaySim** | n=338 account windows | LightGBM | Flat only | 0.600 | 0.474 | 0.529 |
 | **PaySim** | n=338 account windows | HistGB | Flat + Graph | 0.500 | 0.421 | 0.457 |
 | **PaySim** | n=338 account windows | HistGB | Flat only | 0.600 | 0.474 | 0.529 |
-| **IBM HI-Small** | n=4,982 transactions | LightGBM | Flat + Graph | 0.630 | 0.408 | 0.495 |
-| **IBM HI-Small** | n=4,982 transactions | LightGBM | Flat only | 0.683 | 0.344 | 0.457 |
-| **IBM HI-Small** | n=4,982 transactions | **HistGB (Held-out Argmax)** | Flat + Graph | **0.619** | **0.416** | **0.498** |
-| **IBM HI-Small** | n=4,982 transactions | HistGB | Flat only | 0.627 | 0.336 | 0.438 |
+| **IBM HI-Small** | n=4,982 windows | LightGBM | Flat + Graph | 0.630 | 0.408 | 0.495 |
+| **IBM HI-Small** | n=4,982 windows | LightGBM | Flat only | 0.683 | 0.344 | 0.457 |
+| **IBM HI-Small** | n=4,982 windows | **HistGB (Held-out Argmax)** | Flat + Graph | **0.619** | **0.416** | **0.498** |
+| **IBM HI-Small** | n=4,982 windows | HistGB | Flat only | 0.627 | 0.336 | 0.438 |
 
 *Note: Shipped `models/` maintains the PaySim held-out argmax (see `models/meta.json` + MLflow). IBM runs were maintained in an isolated experiment database (`omniguard_ibm`).*
 
@@ -120,7 +120,7 @@ Evaluated across PaySim and IBM AML synthetic benchmark ledgers with strict grou
 | **Boundary Cases** | 10 | 0 | 7 | 3 | **1.000** | — |
 | **Prompt Injection Attack** | 5 | 0 | 0 | 5 | **1.000** | **1.000** |
 
-*Takeaway: 0 out of 15 true positives were auto-closed. All injection attempts were successfully quarantined and diverted to human compliance officers with 100% citation grounding.*
+*Takeaway: 0 out of 15 true positives were auto-closed. All injection attempts were successfully quarantined and diverted to human compliance officers. Citations are checked, and failures go to a human.*
 
 ### 3. Live NVIDIA NIM Smoke Test (Super-120B + Lightning-30B, n=6)
 
@@ -136,10 +136,10 @@ Evaluated across PaySim and IBM AML synthetic benchmark ledgers with strict grou
 | **1. Data Acquisition** | Kaggle download of IBM AML `HI-Small` dataset (454 MiB) | `~65s` |
 | **2. DB Ingestion** | Bulk load of 53,785 transactions into isolated `omniguard_ibm` PostgreSQL DB | `~128s` |
 | **3. Model Training** | CPU-bound model fitting & MLflow tracking across ~5,000 sliding windows | *Variable (CPU-bound)* |
-| **4. Verification & CI** | Byte-verification/restore of `models/`, docs update, Git commit, and 32-test `pytest` suite | `~36s` |
+| **4. Verification & CI** | Byte-verification/restore of `models/`, docs update, Git commit, and 37-test `pytest` suite | `~36s` |
 
 ### ⚠️ The Honest Engineering Caveat
-> **Read Before Quoting:** Evaluated on realistic synthetic ledgers (338 windows for PaySim, 4,982 transactions for IBM HI-Small) and free-tier NVIDIA NIM endpoints. The pipeline logic is strictly verified (fraud never auto-clears, citations enforced, injection quarantined). Shipped models represent prototype compliance pipelines rather than a calibrated enterprise-scale deployment.
+> **Read Before Quoting:** Evaluated on realistic synthetic ledgers (338 windows for PaySim, 4,982 windows for IBM HI-Small) and free-tier NVIDIA NIM endpoints. The pipeline logic is strictly verified (fraud never auto-clears, citations enforced, injection quarantined). Shipped models represent prototype compliance pipelines rather than a calibrated enterprise-scale deployment.
 
 ---
 
@@ -198,7 +198,7 @@ python scripts/seed.py --reset
 # Train ML baseline (LightGBM + IsolationForest)
 python scripts/train.py
 
-# Run test suite (32 unit, e2e, and resilience tests)
+# Run test suite (37 unit, e2e, and resilience tests)
 python -m pytest -q
 ```
 
@@ -294,7 +294,7 @@ omniguard-aml/
 │   ├── graphs_investigation.py # Alert investigation workflow graph
 │   ├── graphs_scenario.py    # ScenarioLab control stress-test graph
 │   └── worker.py             # Asynchronous Redis/ARQ job worker
-├── tests/                    # Pytest test suite (32 unit & e2e tests)
+├── tests/                    # Pytest test suite (37 unit & e2e tests)
 ├── ui/                       # React / Vite single-page application
 ├── docker-compose.yml        # Multi-container orchestration specification
 ├── FLOW.md                   # Complete architectural call-graph documentation

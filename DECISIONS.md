@@ -168,7 +168,7 @@ Fraud is never auto-cleared; clean mostly closes. Challenger exoneration on
 random KYC is noise (stated) — real KYC feed required for that signal to mean
 anything. Edges: CI workflow, DEMO.md script, clean-clone compose verified
 (fail-fast messages + config), UI click-through ready.
-32 tests green on SQLite; verified complete.
+37 tests green on SQLite; verified complete.
 
 ### D22. MLflow file store re-enabled + train metrics split — ACCEPTED (2026-10-17)
 Context: verification pass found MLflow 3.x raises on the `./mlruns` file
@@ -189,7 +189,7 @@ Context: Security audit identified that (1) raw `</untrusted_transaction_memo>` 
 
 Decision: HTML-escaped delimiters in `injection.sandbox()`, added NFKC + zero-width stripping across both `memo` and `counterparty_name` in `scan_transaction()`, replaced `assert` in `graphs_scenario.approve_and_execute()` with an explicit `ValueError`, and switched `api.require_key()` to `secrets.compare_digest()`. Investigator prompt now instructs citing `policy_id` (never title). Unique index `idx_human_decisions_run_id` added to both DDLs to prevent duplicate analyst sign-offs. Further hardening in the same pass: MLflow failures logged instead of swallowed (`ml.py`); 5 bare `except` in `graph_features` now logged at debug; empty citation sets no longer vacuously valid (`verifier.py`); high-risk filter made dialect-safe; Pydantic `ReviewBody`/`ScenarioBody` models (422 not 500); resilience logging moved to stdlib `logging` (`llm.py`); stale orphan `hf_data` pyc removed.
 
-Consequence: Sandbox breakout, homoglyph evasion, and `-O` tamper-check bypass closed; 35/35 pytest suite green. New tests: `test_tier1_security.py` (3).
+Consequence: Sandbox breakout, homoglyph evasion, and `-O` tamper-check bypass closed; 37/37 pytest suite green. New tests: `test_tier1_security.py` (3).
 
 ---
 

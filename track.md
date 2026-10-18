@@ -13,7 +13,7 @@
 | A | Docs truth pass (README / DECISIONS / FLOW / V1 / llm.py) | ✅ done | `27784a1` |
 | B | IBM HI-Small dataset experiment (isolated DB + MLflow) | ✅ done | `1c2db60` |
 | C | UI redesign → workbench + `GET /auth/check` | ✅ code done · ⏳ browser click-through pending | `c876e94` (swept in) → `6efb8fa` (final) |
-| D | Hardening pass (Tier 1 + selected Tier 2) | ✅ done, 35 tests green | (uncommitted → this commit) |
+| D | Hardening pass (Tier 1 + selected Tier 2) | ✅ done, 37 tests green | (uncommitted → this commit) |
 | — | README full revamp (badges, mermaid, benchmarks) | ✅ done (parallel commit) | `bc424a0` |
 | — | V2 documentation (PDF) | ✅ added (parallel commit) | `e666cb4` |
 
@@ -93,7 +93,7 @@ Run **fully isolated** from the demo environment (no pollution of shipped models
 
 ## 4. Hardening pass (Tier 1 + selected Tier 2) — D23a–j
 
-Code review found security/robustness gaps the test suite didn't catch. None change happy-path behavior; all 35 tests green.
+Code review found security/robustness gaps the test suite didn't catch. None change happy-path behavior; all 37 tests green.
 
 | ID | Change | File | Why |
 |---|---|---|---|
@@ -108,7 +108,7 @@ Code review found security/robustness gaps the test suite didn't catch. None cha
 | D23i | Resilience logging via stdlib `logging` (8 `print` → `_log`) | `llm.py` | Enables log-level control; no behavior change |
 | D23j | Deleted stale orphan `__pycache__/hf_data.cpython-314.pyc` | `src/omniguard/__pycache__/` | No source existed |
 
-**Tests added (3):** `test_injection_sandbox_escapes_closing_tag`, `test_verifier_empty_citations_not_vacuously_valid`, `test_approve_requires_locked_state`. Test count: 32 → **35**.
+**Tests added (3):** `test_injection_sandbox_escapes_closing_tag`, `test_verifier_empty_citations_not_vacuously_valid`, `test_approve_requires_locked_state`. Test count: **37**.
 
 ### 4.1 Reviewer-spec Tier 1 additions (this pass)
 
@@ -124,7 +124,7 @@ Applied the security audit spec on top of D23a–j:
 | D23 rewritten | now documents Tier 1 Security Hardening per audit spec | `DECISIONS.md` |
 | New test file | `tests/test_tier1_security.py` (3 tests) | `tests/` |
 
-Test count: 35 → **37** (all green).
+Test count: **37** (all green).
 
 ---
 
