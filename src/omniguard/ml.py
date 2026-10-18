@@ -80,7 +80,7 @@ def train(X: np.ndarray, y: np.ndarray, family: str = "auto") -> dict:
         with mlflow.start_run(run_name="train"):
             mlflow.log_params({"model_type": mtype, "n": len(y)})
             mlflow.log_metrics({"pos_rate": float(y.mean())})
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         _log.warning("mlflow logging skipped: %s", e)
     return meta
 

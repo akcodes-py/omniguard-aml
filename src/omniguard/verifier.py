@@ -20,7 +20,7 @@ def verify_citations(investigator: dict, tx_ids: set[str], policies: list[dict],
     if tx_ids:
         tx_ok = bool(cited_tx) and all(c in tx_ids for c in cited_tx)
     else:
-        tx_ok = True  # no transactions in window -> nothing to cite
+        tx_ok = True
     pol_ok = all(tuple(c) in current if isinstance(c, (list, tuple)) else False for c in cited_pol)
     # numeric claims: {"total_in": x, ...} optionally supplied by the LLM
     math_ok = True

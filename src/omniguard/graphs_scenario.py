@@ -79,8 +79,6 @@ def approve_and_execute(set_id: str, control_id: str = "rule_48h_passthrough",
                         f"already executed or not ready for approval")
     specs, txs = loads(sset["scenarios"]), loads(sset["generated_txs"])
     expectations = loads(out["expectations"])
-    # integrity: recompute lock hash, must match sealed value (explicit raise so it
-    # survives `python -O`, which strips assert statements)
     actual_hash = sg.sha256(expectations)
     if actual_hash != out["expectation_hash"]:
         raise ValueError(
