@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 from . import graphs_investigation as gi
 from . import graphs_scenario as gs
@@ -26,6 +27,19 @@ app.add_middleware(
 def require_key(x_api_key: str = Header(default="")) -> None:
     if x_api_key != settings.API_KEY:
         raise HTTPException(status_code=401, detail="invalid API key")
+
+
+class ReviewBody(BaseModel):
+    run_id: str
+    analyst_id: str
+    decision: str
+    notes: str = ""
+    rationale: str = ""
+
+
+class ScenarioBody(BaseModel):
+    concern_text: str = Field(min_length=1)
+    submitted_by: str = "unknown"
 
 
 @app.get("/health")
@@ -63,10 +77,10 @@ async def investigate_status(alert_id: str, _: None = Depends(require_key)) -> d
 
 
 @app.post("/investigate/{alert_id}/review")
-async def investigate_review(alert_id: str, body: dict, _: None = Depends(require_key)) -> dict:
+async def investigate_review(alert_id: str, body: ReviewBody, _: None = Depends(require_key)) -> dict:
     try:
-        return gi.review(alert_id, body["run_id"], body["analyst_id"],
-                         body["decision"], body.get("notes", body.get("rationale", "")))
+        notes = body.notes or body.rationale
+        return gi.review(alert_id, body.run_id, body.analyst_id, body.decision, notes)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
@@ -74,8 +88,8 @@ async def investigate_review(alert_id: str, body: dict, _: None = Depends(requir
 
 
 @app.post("/scenario/", status_code=202)
-async def scenario_create(body: dict, _: None = Depends(require_key)) -> dict:
-    cid = gs.ingest(body["concern_text"], body.get("submitted_by", "unknown"))
+async def scenario_create(body: ScenarioBody, _: None = Depends(require_key)) -> dict:
+    cid = gs.ingest(body.concern_text, body.submitted_by)
     job_id = await q.enqueue_scenario(cid)
     return {"concern_id": cid, "job_id": job_id}
 

@@ -15,6 +15,7 @@ an stderr warning and mock:true in token_cost.
 from __future__ import annotations
 
 import json
+import logging
 import random
 import sys
 import threading
@@ -24,6 +25,8 @@ from typing import Any
 
 from .config import settings
 from .prompts import TEMPLATES, prompt_version_hash
+
+_log = logging.getLogger(__name__)
 
 REASON_KINDS = ("investigator", "scenario_author")
 
@@ -208,10 +211,10 @@ def _ensure_model_known(model: str) -> None:
             client = OpenAI(base_url=base, api_key=settings.NIM_API_KEY, timeout=15.0)
             _CATALOG[base] = {m.id for m in client.models.list().data}
         except Exception as e:  # noqa: BLE001 — catalog down must not block inference
-            print(f"WARNING: NIM preflight unreachable ({e}); continuing", file=sys.stderr)
+            _log.warning("NIM preflight unreachable (%s); continuing", e)
             return
     if model not in _CATALOG[base]:
-        print(f"WARNING: model {model} not in NIM catalog; call may 404", file=sys.stderr)
+        _log.warning("model %s not in NIM catalog; call may 404", model)
 
 
 def _stream_complete(client, *, model: str, messages: list[dict],
@@ -307,9 +310,8 @@ def _nim_call(kind: str, payload: dict) -> tuple[Any, dict]:
                 break
             tried += 1
             _pace("nim")
-            print(f"[nim] attempt {tried} model={model} "
-                  f"remaining={max(0.0, end - time.monotonic()):.0f}s",
-                  file=sys.stderr, flush=True)
+            _log.info("[nim] attempt %d model=%s remaining=%.0fs", tried, model,
+                     max(0.0, end - time.monotonic()))
             try:
                 # Per-attempt network cap always fits inside the remaining
                 # shared budget — a stalled attempt can never eat the whole
@@ -347,18 +349,17 @@ def _nim_call(kind: str, payload: dict) -> tuple[Any, dict]:
             except Exception as e:  # noqa: BLE001
                 verdict = _classify_error(e)
                 last_err = e
-                print(f"[nim] attempt {tried} {type(e).__name__} -> {verdict}",
-                      file=sys.stderr, flush=True)
+                _log.info("[nim] attempt %d %s -> %s", tried, type(e).__name__, verdict)
                 if verdict == "fatal":
                     raise RuntimeError(f"NIM call fatal ({model}): {e}") from e
                 if verdict == "fallback":
-                    print(f"WARNING: {model} not found; falling back in chain", file=sys.stderr)
+                    _log.warning("%s not found; falling back in chain", model)
                     break  # next model in chain — no point retrying a wrong id
                 if isinstance(e, _IdleTimeout) and model != _chain_for(kind)[-1]:
                     # Requeueing a stalled free-tier request loses queue position;
                     # go straight to the fallback model instead of retrying.
                     # (On the last model in chain, fall through to normal retry.)
-                    print(f"WARNING: {model} stalled; falling back in chain", file=sys.stderr)
+                    _log.warning("%s stalled; falling back in chain", model)
                     break
                 time.sleep(_backoff(tried))
         if time.monotonic() > end:
@@ -395,14 +396,14 @@ def call_json(kind: str, payload: dict) -> tuple[Any, dict]:
         except Exception as e:  # noqa: BLE001
             if settings.STRICT_LLM:
                 raise
-            print(f"WARNING: NIM failed ({e}); degrading to mock", file=sys.stderr)
+            _log.warning("NIM failed (%s); degrading to mock", e)
     elif provider == "bedrock":
         try:
             return _bedrock_call(kind, payload)
         except Exception as e:  # noqa: BLE001
             if settings.STRICT_LLM:
                 raise
-            print(f"WARNING: Bedrock failed ({e}); degrading to mock", file=sys.stderr)
+            _log.warning("Bedrock failed (%s); degrading to mock", e)
     elif provider != "mock":
         raise ValueError(f"unknown LLM_PROVIDER: {provider}")
     return _mock_call(kind, payload)

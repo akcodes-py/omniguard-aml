@@ -70,10 +70,19 @@ def approve_and_execute(set_id: str, control_id: str = "rule_48h_passthrough",
         out = fetchone(cur, f"SELECT * FROM {t('expected_outcomes')} WHERE set_id=?", (set_id,))
     finally:
         con.close()
+    if sset is None:
+        raise KeyError(f"scenario set not found: {set_id}")
+    if out is None:
+        raise KeyError(f"expected outcomes not found: {set_id}")
+    if sset.get("status") != "LOCKED":
+        raise ValueError(f"scenario set not in LOCKED state (status={sset.get('status')!r}); "
+                        f"already executed or not ready for approval")
     specs, txs = loads(sset["scenarios"]), loads(sset["generated_txs"])
     expectations = loads(out["expectations"])
-    # integrity: recompute lock hash, must match sealed value
-    assert sg.sha256(expectations) == out["expectation_hash"], "expectation hash mismatch — tamper suspected"
+    # integrity: recompute lock hash, must match sealed value (explicit raise so it
+    # survives `python -O`, which strips assert statements)
+    if sg.sha256(expectations) != out["expectation_hash"]:
+        raise ValueError("expectation hash mismatch — tamper suspected")
     actual_raw = sg.execute_control_48h_passthrough(txs)
     actual = {str(k): v for k, v in actual_raw.items()}
     results, summary = sg.compare(expectations, actual)

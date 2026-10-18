@@ -103,7 +103,7 @@ def fetch_alert(alert_id: str) -> dict:
         acct = _row(cur, f"SELECT * FROM {t('accounts')} WHERE account_id=?", (alert["account_id"],))
         txs = _rows(cur, f"SELECT * FROM {t('transactions')} WHERE src_account=? OR dst_account=? ORDER BY ts",
                     (alert["account_id"], alert["account_id"]))
-        hrs = _rows(cur, f"SELECT account_id FROM {t('accounts')} WHERE high_risk_jurisdiction IS TRUE")
+        hrs = _rows(cur, f"SELECT account_id FROM {t('accounts')} WHERE high_risk_jurisdiction")
         hr_set = {r["account_id"] for r in hrs}
         return {"alert": alert, "account": acct or {}, "txs": txs, "high_risk": hr_set}
     finally:

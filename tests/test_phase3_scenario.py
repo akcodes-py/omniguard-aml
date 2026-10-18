@@ -17,6 +17,18 @@ def test_lock_hash_immutable_and_report_complete():
     assert len(out["evidence_pack_hash"]) == 64
 
 
+def test_approve_requires_locked_state():
+    init_db()
+    cid = gs.ingest("smurfing via micro-deposits under reporting threshold", "risk-owner-1")
+    lab = gs.run_scenariolab(cid)
+    gs.approve_and_execute(lab["set_id"])  # first approve -> EXECUTED
+    try:
+        gs.approve_and_execute(lab["set_id"])
+    except ValueError:
+        return
+    raise AssertionError("second approve must raise ValueError (idempotency guard)")
+
+
 def test_deterministic_generator():
     specs = [{"kind": "suspicious", "typology": "x", "n_txs": 3, "amount_each": 100.0,
               "window_hours": 24.0, "backstory": "b", "expected": "ALERT"}]

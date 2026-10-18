@@ -10,11 +10,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
 
 from .config import settings
+
+_log = logging.getLogger(__name__)
 
 FEATURE_COLS = ["n_txs", "total_in", "total_out", "net_flow_abs", "max_amount",
                 "mean_amount", "pass_through_ratio", "velocity_24h", "night_ratio",
@@ -77,8 +80,8 @@ def train(X: np.ndarray, y: np.ndarray, family: str = "auto") -> dict:
         with mlflow.start_run(run_name="train"):
             mlflow.log_params({"model_type": mtype, "n": len(y)})
             mlflow.log_metrics({"pos_rate": float(y.mean())})
-    except Exception:
-        pass
+    except Exception as e:  # noqa: BLE001
+        _log.warning("mlflow logging skipped: %s", e)
     return meta
 
 

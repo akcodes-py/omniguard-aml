@@ -29,7 +29,11 @@ def scan_text(value: str | None) -> bool:
 
 
 def sandbox(tag: str, value: str | None) -> str:
-    return f"<untrusted_{tag}>{value or ''}</untrusted_{tag}>"
+    # Escape so a memo containing a closing tag cannot break out of the
+    # untrusted boundary (prompt-injection hardening).
+    v = value or ""
+    v = v.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return f"<untrusted_{tag}>{v}</untrusted_{tag}>"
 
 
 def scan_transaction(tx: dict) -> dict:

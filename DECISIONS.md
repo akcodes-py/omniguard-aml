@@ -183,6 +183,26 @@ Consequence: `mlruns/` now holds real runs (train_split: 14 metrics matching
 README table P/R/F1; train: pos_rate). File store is MLflow "maintenance
 mode" — v2 should migrate to `sqlite:///mlflow.db` or the compose server.
 
+### D23. Hardening pass (Tier 1 + selected Tier 2) — ACCEPTED (2026-10-18)
+
+Context: code review found security/robustness gaps that the test suite did not
+catch. None change the happy-path behavior; all keep the 35 tests green.
+
+- **D23a Injection sandbox escapes attacker-controlled text** (`injection.py`): `sandbox()` now HTML-escapes `<`, `>`, `&` before wrapping, so a memo containing `</untrusted_…>` can no longer close the boundary early. Test: `test_injection_sandbox_escapes_closing_tag`.
+- **D23b Tamper check is a hard raise, not `assert`** (`graphs_scenario.py`): `assert sha256(...) == ...` → `if …: raise ValueError(...)`, so the cryptographic lock survives `python -O` / `PYTHONOPTIMIZE=1`.
+- **D23c Scenario approve is idempotent** (`graphs_scenario.py`): rejects anything not in `LOCKED` state (missing set, missing outcomes, already executed) with `KeyError`/`ValueError` instead of crashing mid-flight. Test: `test_approve_requires_locked_state`.
+- **D23d MLflow failures are logged, not swallowed** (`ml.py`): mirrors D22 — `_log.warning(...)` instead of `pass`, consistent with `train.py`.
+- **D23e Graph-feature failures logged at debug** (`graph_features.py`): 5 bare `except Exception: pass` → `except Exception as exc` + `_log.debug(...)`, still degrading to zeros.
+- **D23f Empty citation sets are not vacuously valid** (`verifier.py`): `tx_ok` now requires at least one cited tx when the window is non-empty. Test: `test_verifier_empty_citations_not_vacuously_valid`.
+- **D23g Dialect-safe high-risk filter** (`graphs_investigation.py`): `WHERE high_risk_jurisdiction IS TRUE` → bare column, works on both Postgres and SQLite without relying on SQLite truthiness.
+- **D23h Pydantic request models** (`api.py`): `ReviewBody` / `ScenarioBody` replace untyped `dict`, so malformed bodies return 422 instead of 500 `KeyError`; `concern_text` has `min_length=1`.
+- **D23i Resilience logging via stdlib `logging`** (`llm.py`): the 8 `print(..., file=sys.stderr)` calls become `_log` calls (levels: info for attempts, warning for fallbacks/failures). No behavior change; enables log-level control.
+- **D23j Orphan bytecode removed**: deleted stale `__pycache__/hf_data.cpython-314.pyc` (no source existed).
+
+Consequence: 32 → **35 tests** green; injection boundary can no longer be closed early by attacker input; ScenarioLab tamper check cannot be stripped by optimization flags.
+
+---
+
 ## Proposed (v2 Roadmap)
 
 ### P1. Dedicated Production LLM Endpoints — PROPOSED

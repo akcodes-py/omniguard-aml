@@ -7,7 +7,11 @@ community_id, shortest_path_hr (hops to nearest high-risk node).
 """
 from __future__ import annotations
 
+import logging
+
 import networkx as nx
+
+_log = logging.getLogger(__name__)
 
 
 def compute_graph_features(txs: list[dict], account_id: str, high_risk_accounts: set[str] | None = None) -> dict:
@@ -22,21 +26,25 @@ def compute_graph_features(txs: list[dict], account_id: str, high_risk_accounts:
 
     try:
         pr = nx.pagerank(g, max_iter=200)
-    except Exception:
+    except Exception as exc:  # noqa: BLE001
+        _log.debug("pagerank failed: %s", exc)
         pr = {n: 0.0 for n in g.nodes}
     try:
         bw = nx.betweenness_centrality(g)
-    except Exception:
+    except Exception as exc:  # noqa: BLE001
+        _log.debug("betweenness failed: %s", exc)
         bw = {n: 0.0 for n in g.nodes}
     try:
         cycles = list(nx.simple_cycles(g))
         in_cycle = any(account_id in c for c in cycles)
-    except Exception:
+    except Exception as exc:  # noqa: BLE001
+        _log.debug("simple_cycles failed: %s", exc)
         in_cycle = False
     try:
         comms = list(nx.weakly_connected_components(g.to_undirected())) if len(g) else []
         community_id = next((i for i, c in enumerate(comms) if account_id in c), 0)
-    except Exception:
+    except Exception as exc:  # noqa: BLE001
+        _log.debug("weakly_connected_components failed: %s", exc)
         community_id = 0
     # hops to nearest high-risk node (undirected distance)
     shortest = -1
@@ -46,7 +54,8 @@ def compute_graph_features(txs: list[dict], account_id: str, high_risk_accounts:
             dists = nx.single_source_shortest_path_length(ug, account_id)
             hits = [d for n, d in dists.items() if n in high_risk_accounts]
             shortest = min(hits) if hits else -1
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
+            _log.debug("shortest_path failed: %s", exc)
             shortest = -1
 
     return {

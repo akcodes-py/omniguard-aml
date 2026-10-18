@@ -35,7 +35,7 @@ Client
             ├─ [N1] fetch_alert() → DB: alerts + accounts + transactions (+ high-risk set)
             ├─ [N1] features.py:compute_features() + graph_features.py:compute_graph_features()
             ├─ [N1] injection.py:scan_transaction() per tx → quarantined?
-            │       injection.py:sandbox() wraps memos for LLM
+            │       injection.py:sandbox() wraps memos for LLM (HTML-escaped to prevent boundary breakout)
             ├─ [N2] ml.py:to_vector() → ml.score() → {supervised, anomaly, composite}
             │       ml.explain() → SHAP (or weight approx)
             ├─ [N3] policy_retrieval.py:retrieve(tags) → DB: policy_notes (top 3–5, current only)
@@ -76,7 +76,8 @@ Client
 Client
  └─POST /scenario/{id}/approve ── api.py:scenario_approve()
     └─ graphs_scenario.py:approve_and_execute(set_id)
-        ├─ → DB: read set + sealed expectations; assert sha256(expectations) == expectation_hash (tamper check)
+        ├─ → DB: read set + sealed expectations; raise if status != LOCKED (idempotency guard);
+        │       raise if sha256(expectations) != expectation_hash (tamper check, hard raise)
         ├─ [execute] scenario_gen.py:execute_control_48h_passthrough(txs) → {idx: ALERT|NO_ALERT}
         ├─ [report] scenario_gen.py:compare(expected, actual) → MATCH/MISS/OVER-ALERT + summary
         │       + COVERAGE_GAPS_DEFAULT ("what was NOT tested")
