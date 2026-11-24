@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from collections import Counter
 from typing import Any, TypedDict
 
 from langgraph.checkpoint.memory import MemorySaver
@@ -35,6 +36,8 @@ from . import verifier as ver
 from .config import settings
 from .db import connect, dumps, fetchall, fetchone, loads, run, t
 from .prompts import prompt_version_hash
+from security import audit_logger as audit
+from security import pii_masker as pii
 
 
 # ---------------------------------------------------------------------------
@@ -55,6 +58,11 @@ class InvestigationState(TypedDict, total=False):
     injection_scan: dict[str, Any]
     quarantined: bool
     sanitized_memos: list[str]
+    # Security controls: PII masking (LLM02) + RAG chunk quarantine (LLM01/09)
+    pii_mask_counts: dict[str, int]
+    pii_tokens: dict[str, str]              # token -> category, no raw values
+    policy_quarantined: bool
+    policy_scan: dict[str, Any]
     # Node 2: compute_features
     features: dict[str, Any]
     graph_features: dict[str, Any]
@@ -140,6 +148,14 @@ async def node_fetch_and_sanitize(state: InvestigationState) -> dict:
     }
     memos = [inj.sandbox(tx.get("memo"), tag="transaction_memo") for tx in txs]
 
+    if quarantined:
+        audit.log_security_event(
+            case_id=state["alert_id"], owasp_category=audit.LLM01,
+            action_taken="QUARANTINED_TRANSACTION_INJECTION",
+            details={"flagged_fields": injection_scan["flagged_fields"],
+                     "n_flagged_tx": sum(1 for s in scans if s["quarantined"])},
+        )
+
     return {
         "alert": alert, "account": acct, "txs": txs,
         "high_risk_accounts": list(bundle["high_risk"]),
@@ -175,16 +191,42 @@ async def node_ml_risk_scoring(state: InvestigationState) -> dict:
 
 
 async def node_retrieve_policies(state: InvestigationState) -> dict:
-    """Node 4: Retrieve compliance policies via pgvector / pseudo-embed."""
-    policies = pr.retrieve(
+    """Node 4: Retrieve policies via pgvector / pseudo-embed and quarantine
+    poisoned chunks before they can reach the LLM (LLM01:2026 / LLM09:2026)."""
+    retrieved = pr.retrieve(
         _typology_tags(state["features"]),
         state["alert"].get("trigger_reason", ""),
     )
-    return {"policies": policies}
+    scans = [inj.scan_policy_chunk(p) for p in retrieved]
+    flagged = [
+        {"policy_id": p["policy_id"], "flagged_fields": s["flagged_fields"]}
+        for p, s in zip(retrieved, scans) if s["quarantined"]
+    ]
+    policy_quarantined = bool(flagged)
+    # Infected chunks are never passed to the investigator; metadata only is
+    # retained in state so the analyst can see which policy version was hit.
+    policies = [p for p, s in zip(retrieved, scans) if not s["quarantined"]]
+    if policy_quarantined:
+        audit.log_security_event(
+            case_id=state["alert_id"], owasp_category=f"{audit.LLM01}/{audit.LLM09}",
+            action_taken="QUARANTINED_RAG_CHUNK",
+            details={"flagged": flagged, "n_dropped": len(flagged)},
+        )
+    return {
+        "policies": policies,
+        "policy_quarantined": policy_quarantined,
+        "policy_scan": {"quarantined": policy_quarantined, "flagged": flagged},
+    }
 
 
 async def node_dual_llm(state: InvestigationState) -> dict:
-    """Node 5: Parallel investigator + challenger LLM calls (asyncio.gather)."""
+    """Node 5: Mask every alert payload, then parallel investigator + challenger calls.
+
+    Masking happens here (the LangGraph boundary) and again at ``llm.call_json``
+    (the provider boundary) so no caller can bypass it. Only masked payloads are
+    rendered into outbound prompts; ``tx_ids``/``policy_ids`` are preserved for
+    citation verification.
+    """
     inv_payload = {
         "facts": state["features"], "tx_ids": state["tx_ids"],
         "policy_ids": [[p["policy_id"], p["version"]] for p in state["policies"]],
@@ -192,13 +234,28 @@ async def node_dual_llm(state: InvestigationState) -> dict:
         "memos": state["sanitized_memos"],
     }
     chal_payload = {"facts": state["features"], "kyc": state["account"]}
+    known_names = [state["account"].get("customer_name", "")]
+    known_names.extend(tx.get("counterparty_name", "") for tx in state["txs"])
+
+    masked_inv = pii.mask_payload(inv_payload, known_names=known_names)
+    masked_chal = pii.mask_payload(chal_payload, known_names=known_names)
+    counts = dict(Counter(masked_inv.counts) + Counter(masked_chal.counts))
+    audit.log_security_event(
+        case_id=state["alert_id"], owasp_category=audit.LLM02,
+        action_taken="PII_MASK_APPLIED",
+        details={"counts": counts, "total": sum(counts.values()),
+                 "targets": ["investigator", "challenger"]},
+    )
+
     (inv_out, inv_tc), (chal_out, chal_tc) = await asyncio.gather(
-        asyncio.to_thread(llm.call_json, "investigator", inv_payload),
-        asyncio.to_thread(llm.call_json, "challenger", chal_payload),
+        asyncio.to_thread(llm.call_json, "investigator", masked_inv.payload),
+        asyncio.to_thread(llm.call_json, "challenger", masked_chal.payload),
     )
     return {
         "investigator_output": inv_out, "investigator_tc": inv_tc,
         "challenger_output": chal_out, "challenger_tc": chal_tc,
+        "pii_mask_counts": counts,
+        "pii_tokens": {**masked_inv.tokens, **masked_chal.tokens},
     }
 
 
@@ -208,12 +265,31 @@ async def node_verify_and_adjudicate(state: InvestigationState) -> dict:
         state["investigator_output"], set(state["tx_ids"]),
         state["policies"], state["features"],
     )
-    has_ex = bool(state["challenger_output"].get("has_verified_kyc_exoneration"))
+    # An injected prompt can flip a boolean; it cannot fabricate a KYC field.
+    has_ex = ver.verify_exoneration(state["challenger_output"], state["account"])
+    quarantined = bool(state.get("quarantined")) or bool(state.get("policy_quarantined"))
     disp = ver.adjudicate(
         state["ml_scores"]["composite"], has_ex,
-        vr["citations_valid"], state["quarantined"],
+        vr["citations_valid"], quarantined,
     )
-    return {"verifier_result": {**vr, "disposition": disp}, "disposition": disp}
+    if not vr["citations_valid"]:
+        audit.log_security_event(
+            case_id=state["alert_id"], owasp_category=audit.LLM07,
+            action_taken="UNGROUNDED_OUTPUT_FLAGGED",
+            details={"tx_ok": vr["tx_ok"], "pol_ok": vr["pol_ok"],
+                     "math_ok": vr["math_ok"], "disposition": disp},
+        )
+    if ver.hitl_required(disp):
+        audit.log_security_event(
+            case_id=state["alert_id"], owasp_category=f"{audit.LLM03}/{audit.ASI01}",
+            action_taken="HITL_ESCALATION",
+            details={"disposition": disp, "quarantined": quarantined,
+                     "citations_valid": vr["citations_valid"]},
+        )
+    return {
+        "verifier_result": {**vr, "disposition": disp, "exoneration_grounded": has_ex},
+        "disposition": disp,
+    }
 
 
 async def node_write_audit_record(state: InvestigationState) -> dict:
@@ -358,6 +434,7 @@ async def run_investigation(alert_id: str, thread_id: str | None = None) -> dict
         "verifier_result": result.get("verifier_result", {}),
         "injection_scan": result.get("injection_scan", {}),
         "token_cost": result.get("token_cost", {}),
+        "pii_mask_counts": result.get("pii_mask_counts", {}),
     }
 
 
@@ -393,6 +470,11 @@ def review(alert_id: str, run_id: str, analyst_id: str,
                    f"stale: watermark {stored_mark} != {latest}. {rationale}", True))
             if hasattr(con, "commit"):
                 con.commit()
+            audit.log_security_event(
+                case_id=alert_id, owasp_category=audit.ASI09,
+                action_taken="HITL_RERUN_TRIGGERED",
+                details={"run_id": run_id, "analyst_id": analyst_id, "stale": True},
+            )
             return {"status": "rerun_triggered", "stale": True, "latest_tx": latest}
         did = uuid.uuid4().hex
         run(cur, f"INSERT INTO {t('human_decisions')} "
@@ -401,6 +483,12 @@ def review(alert_id: str, run_id: str, analyst_id: str,
               (did, run_id, alert_id, analyst_id, norm, rationale or norm, False))
         if hasattr(con, "commit"):
             con.commit()
+        audit.log_security_event(
+            case_id=alert_id, owasp_category=audit.ASI09,
+            action_taken=f"HITL_{norm}",
+            details={"run_id": run_id, "analyst_id": analyst_id,
+                     "decision_id": did, "stale": False},
+        )
         return {"status": "finalized", "stale": False, "decision_id": did}
     finally:
         con.close()

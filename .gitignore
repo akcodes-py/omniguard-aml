@@ -12,3 +12,5 @@ kaggle/
 models/
 mlruns/
 mlruns_ibm/
+
+*.local

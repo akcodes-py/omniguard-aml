@@ -154,6 +154,17 @@ CREATE TABLE IF NOT EXISTS audit.model_promotions (
     created_at         timestamptz NOT NULL DEFAULT now()
 );
 
+-- Security event audit trail (OWASP A09:2025). Append-only; metadata only.
+CREATE TABLE IF NOT EXISTS audit.security_events (
+    event_id       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    timestamp      timestamptz NOT NULL DEFAULT now(),
+    case_id        text NOT NULL,
+    owasp_category text NOT NULL,
+    action_taken   text NOT NULL,
+    details        jsonb NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS security_events_case_idx ON audit.security_events (case_id, timestamp);
+
 CREATE OR REPLACE FUNCTION audit.block_mutation() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
@@ -186,6 +197,15 @@ CREATE TRIGGER promotions_no_update_delete
 DROP TRIGGER IF EXISTS promotions_no_truncate ON audit.model_promotions;
 CREATE TRIGGER promotions_no_truncate
     BEFORE TRUNCATE ON audit.model_promotions
+    FOR EACH STATEMENT EXECUTE FUNCTION audit.block_mutation();
+
+DROP TRIGGER IF EXISTS security_events_no_update_delete ON audit.security_events;
+CREATE TRIGGER security_events_no_update_delete
+    BEFORE UPDATE OR DELETE ON audit.security_events
+    FOR EACH ROW EXECUTE FUNCTION audit.block_mutation();
+DROP TRIGGER IF EXISTS security_events_no_truncate ON audit.security_events;
+CREATE TRIGGER security_events_no_truncate
+    BEFORE TRUNCATE ON audit.security_events
     FOR EACH STATEMENT EXECUTE FUNCTION audit.block_mutation();
 
 -- ---------------------------------------------------------------- scenario (ScenarioLab, PRD Sec 4 + Sec 6)
@@ -254,7 +274,7 @@ BEGIN
         END IF;
         GRANT USAGE ON SCHEMA core, policy, audit, scenario, agent_state TO app_worker;
         GRANT SELECT ON ALL TABLES IN SCHEMA core, policy TO app_worker;
-        GRANT INSERT, SELECT ON audit.investigation_runs, audit.human_decisions, audit.model_promotions TO app_worker;
+        GRANT INSERT, SELECT ON audit.investigation_runs, audit.human_decisions, audit.model_promotions, audit.security_events TO app_worker;
         GRANT INSERT, SELECT ON scenario.risk_concerns, scenario.scenario_sets, scenario.expected_outcomes, scenario.control_runs TO app_worker;
         GRANT ALL ON SCHEMA agent_state TO app_worker;
     EXCEPTION WHEN insufficient_privilege THEN

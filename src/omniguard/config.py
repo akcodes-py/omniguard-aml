@@ -56,5 +56,11 @@ class Settings(BaseSettings):
     ESCALATE_THRESHOLD: float = 0.70
     CLOSE_THRESHOLD: float = 0.30
 
+    # Security event audit (OWASP A09:2025). JSONL is always written; the
+    # Postgres sink is opt-in and fail-soft so an audit outage never blocks
+    # an investigation. No raw PII is ever written to either sink.
+    SECURITY_LOG_PATH: str = "data/security_events.jsonl"
+    SECURITY_DB_SINK: bool = False
+
 
 settings = Settings()

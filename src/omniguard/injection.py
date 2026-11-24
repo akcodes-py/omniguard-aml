@@ -44,6 +44,24 @@ def sandbox(raw_memo: str | None, tag: str = "untrusted_transaction_memo") -> st
     return f"<{tag}>{safe_text}</{tag}>"
 
 
+def scan_policy_chunk(chunk: Dict[str, Any]) -> Dict[str, Any]:
+    """Scan a retrieved pgvector policy chunk for indirect prompt injection.
+
+    Retrieved content is untrusted data (OWASP LLM01:2026 / LLM09:2026).
+    Only the *field names* are returned — the malicious text itself is never
+    copied into state or into the audit trail.
+    """
+    flagged_fields = []
+    for field in ("title", "body"):
+        raw_val = str(chunk.get(field) or "")
+        if any(re.search(p, _normalize_for_scan(raw_val)) for p in INJECTION_PATTERNS):
+            flagged_fields.append(field)
+    return {
+        "quarantined": len(flagged_fields) > 0,
+        "flagged_fields": flagged_fields,
+    }
+
+
 def scan_transaction(tx: Dict[str, Any]) -> Dict[str, Any]:
     """Scan all untrusted transaction text fields (memo + counterparty_name) without mutating raw values."""
     flagged_fields = []

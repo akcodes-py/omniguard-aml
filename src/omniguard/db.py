@@ -30,6 +30,7 @@ _PG_PREFIX = {
     "investigation_runs": "audit.investigation_runs",
     "human_decisions": "audit.human_decisions",
     "model_promotions": "audit.model_promotions",
+    "security_events": "audit.security_events",
     "risk_concerns": "scenario.risk_concerns",
     "scenario_sets": "scenario.scenario_sets",
     "expected_outcomes": "scenario.expected_outcomes",

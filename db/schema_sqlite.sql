@@ -120,6 +120,26 @@ CREATE TABLE IF NOT EXISTS model_promotions (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Security event audit trail (OWASP A09:2025). Append-only; metadata only.
+CREATE TABLE IF NOT EXISTS security_events (
+    event_id       TEXT PRIMARY KEY,
+    timestamp      TEXT NOT NULL,
+    case_id        TEXT NOT NULL,
+    owasp_category TEXT NOT NULL,
+    action_taken   TEXT NOT NULL,
+    details        TEXT
+);
+CREATE INDEX IF NOT EXISTS security_events_case_idx ON security_events (case_id, timestamp);
+
+DROP TRIGGER IF EXISTS security_events_no_update;
+CREATE TRIGGER security_events_no_update
+BEFORE UPDATE ON security_events
+BEGIN SELECT RAISE(ABORT, 'security_events is append-only'); END;
+DROP TRIGGER IF EXISTS security_events_no_delete;
+CREATE TRIGGER security_events_no_delete
+BEFORE DELETE ON security_events
+BEGIN SELECT RAISE(ABORT, 'security_events is append-only'); END;
+
 CREATE TABLE IF NOT EXISTS risk_concerns (
     concern_id TEXT PRIMARY KEY,
     concern_text TEXT NOT NULL,

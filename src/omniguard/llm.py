@@ -25,6 +25,7 @@ from typing import Any
 
 from .config import settings
 from .prompts import TEMPLATES, prompt_version_hash
+from security import pii_masker as pii
 
 _log = logging.getLogger(__name__)
 
@@ -388,7 +389,17 @@ def _bedrock_call(kind: str, payload: dict) -> tuple[Any, dict]:
 
 
 def call_json(kind: str, payload: dict) -> tuple[Any, dict]:
-    """Returns (parsed_json, token_cost). Live failures: STRICT_LLM raises, else mock."""
+    """Returns (parsed_json, token_cost). Live failures: STRICT_LLM raises, else mock.
+
+    Defense in depth (OWASP LLM02:2026): every Investigator/Challenger payload
+    is masked *at this boundary* even if a caller skipped the LangGraph node.
+    Only category counts are logged — never the masked values or raw PII.
+    """
+    if kind in ("investigator", "challenger"):
+        masked = pii.mask_payload(payload)
+        payload = masked.payload  # type: ignore[assignment]
+        if masked.total:
+            _log.info("PII masked at LLM boundary (%s): %s", kind, masked.counts)
     provider = settings.LLM_PROVIDER
     if provider == "nim":
         try:
