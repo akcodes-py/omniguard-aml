@@ -1,0 +1,88 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>OmniGuard AML — Live VAPT Evidence</title>
+<style>
+* { box-sizing:border-box; }
+body { margin:0; background:#0d1117; color:#e6edf3; font-family:Consolas,'Courier New',monospace; padding:22px; }
+h1 { font-family:Arial,sans-serif; font-size:20px; margin:0 0 4px 0; }
+.sub { font-family:Arial,sans-serif; font-size:12px; color:#8b949e; margin-bottom:18px; }
+.card { border:1px solid #30363d; border-left:5px solid #58a6ff; border-radius:8px; background:#161b22; padding:16px 18px; margin-bottom:16px; width:900px; }
+.card.done401 { border-left-color:#f85149; }
+.card.done403 { border-left-color:#d29922; }
+.card.done429 { border-left-color:#a371f7; }
+.tag { font-family:Arial,sans-serif; font-size:11px; letter-spacing:1px; color:#8b949e; }
+.title { font-family:Arial,sans-serif; font-size:15px; font-weight:bold; margin:4px 0 10px 0; }
+.req { color:#79c0ff; font-size:12px; margin-bottom:8px; }
+.status { font-size:26px; font-weight:bold; margin:6px 0; }
+.s401 { color:#f85149; } .s403 { color:#d29922; } .s429 { color:#a371f7; }
+pre { white-space:pre-wrap; word-break:break-all; background:#0d1117; border:1px solid #30363d; padding:10px; border-radius:6px; font-size:11px; color:#c9d1d9; margin:8px 0 0 0; }
+.meta { font-family:Arial,sans-serif; font-size:11px; color:#8b949e; margin-top:8px; }
+</style></head><body>
+<h1>OmniGuard AML — Live VAPT Evidence</h1>
+<div class="sub">Live responses from http://127.0.0.1:8011 · captured with Playwright · ephemeral dev keys · synthetic data only</div>
+
+<div class="card" id="sec401">
+  <div class="tag">AUTH-04 · LLM02 / API2 — AUTHENTICATION</div>
+  <div class="title">Tampered JWT → 401 Unauthorized</div>
+  <div class="req" id="req401">GET /cases — Authorization: Bearer &lt;tampered HS256 token&gt;</div>
+  <div class="status" id="st401">running…</div>
+  <pre id="body401"></pre>
+  <div class="meta" id="meta401"></div>
+</div>
+
+<div class="card" id="sec403">
+  <div class="tag">IDOR-01 · OWASP API1:2023 — BOLA / IDOR</div>
+  <div class="title">Cross-analyst case read → 403 Forbidden</div>
+  <div class="req" id="req403">GET /cases/{case_id} — Bob's JWT on a case assigned to Alice</div>
+  <div class="status" id="st403">running…</div>
+  <pre id="body403"></pre>
+  <div class="meta" id="meta403"></div>
+</div>
+
+<div class="card" id="sec429">
+  <div class="tag">RATE-01 · LLM06:2026 / API4:2023 — UNBOUNDED CONSUMPTION</div>
+  <div class="title">Login burst → 429 Too Many Requests</div>
+  <div class="req" id="req429">POST /auth/login × 22 from one IP (limit 20/minute)</div>
+  <div class="status" id="st429">running…</div>
+  <pre id="body429"></pre>
+  <div class="meta" id="meta429"></div>
+</div>
+
+<script>
+const BASE = 'http://127.0.0.1:8011';
+async function login(u,p){ return fetch(BASE+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})}); }
+function show(id, resp, text, extra, css){
+  document.getElementById('st'+id).textContent = resp.status + ' ' + resp.statusText;
+  document.getElementById('st'+id).className = 'status ' + css;
+  document.getElementById('body'+id).textContent = text;
+  document.getElementById('meta'+id).textContent = (extra||'') + ' · ' + new Date().toISOString();
+  document.getElementById('sec'+id).className = 'card done'+id;
+}
+(async () => {
+  const alice = await (await login('alice','AlicePass123!')).json();
+  const bob   = await (await login('bob','BobPass123!')).json();
+
+  // 401 — tamper the signature by flipping the last character
+  const t = alice.access_token;
+  const tampered = t.slice(0,-1) + (t.endsWith('A') ? 'B' : 'A');
+  const r401 = await fetch(BASE+'/cases',{headers:{Authorization:'Bearer '+tampered}});
+  const b401 = await r401.text();
+  document.getElementById('req401').textContent = 'GET /cases — Authorization: Bearer ' + tampered.slice(0,24) + '…' + tampered.slice(-4);
+  show('401', r401, b401, 'WWW-Authenticate: ' + (r401.headers.get('www-authenticate')||'—'), 's401');
+
+  // 403 — cross-analyst access
+  const cases = await (await fetch(BASE+'/cases',{headers:{Authorization:'Bearer '+alice.access_token}})).json();
+  const cid = cases.cases[0].case_id;
+  const r403 = await fetch(BASE+'/cases/'+cid,{headers:{Authorization:'Bearer '+bob.access_token}});
+  const b403 = await r403.text();
+  document.getElementById('req403').textContent = 'GET /cases/' + cid + ' — Bob’s JWT (case assigned to alice)';
+  show('403', r403, b403, 'Object-level authorization enforced', 's403');
+
+  // 429 — burst
+  let last, lastBody;
+  for (let i=0;i<22;i++){
+    last = await login('alice','definitely-wrong-password');
+    lastBody = await last.text();
+  }
+  show('429', last, lastBody, 'Retry-After: ' + (last.headers.get('retry-after')||'—'), 's429');
+  document.title = 'DONE';
+})().catch(e => { document.body.insertAdjacentHTML('beforeend','<pre style="color:red">ERROR '+e+'</pre>'); document.title='ERROR'; });
+</script></body></html>

@@ -170,4 +170,4 @@ and run `python -m pip_audit -r requirements.lock` so builds are reproducible.
 - [x] Postman collection and Burp checklist delivered
 - [ ] Production keys provisioned via secret manager
 - [ ] CI upgraded with `pip-audit`, `bandit` and `trivy` steps
-- [ ] Burp screenshots captured in `docs/security_evidence/`
+- [x] Live 401 / 403 / 429 evidence captured in `docs/security_evidence/` via Playwright against a real local API instance (`evidence.html` + `scripts/evidence_server.py`); Burp UI screenshots remain operator evidence to be added locally with `docs/BURP_SUITE_CHECKLIST.md`
