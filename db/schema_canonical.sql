@@ -77,6 +77,21 @@ CREATE TABLE IF NOT EXISTS core.alerts (
     created_at      timestamptz NOT NULL DEFAULT now()
 );
 
+-- ------------------------------------------------------------ regulated cases
+-- Regulated identifiers are AES-256-GCM ciphertext (security.encryption).
+-- Assignment column is the object-level authorization key (BOLA/IDOR defense).
+CREATE TABLE IF NOT EXISTS core.cases (
+    case_id            text PRIMARY KEY,
+    alert_id           text REFERENCES core.alerts(alert_id),
+    account_id_enc     text NOT NULL,
+    customer_id_enc    text,
+    assigned_analyst   text NOT NULL,
+    status             text NOT NULL DEFAULT 'OPEN',
+    created_at         timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS cases_analyst_idx ON core.cases (assigned_analyst, status);
+CREATE INDEX IF NOT EXISTS cases_alert_idx ON core.cases (alert_id);
+
 -- Pre-computed NetworkX graph features per alert (Graph1 Node 1 output, Node 2 input).
 CREATE TABLE IF NOT EXISTS core.graph_features (
     alert_id          text PRIMARY KEY REFERENCES core.alerts(alert_id),
@@ -274,6 +289,7 @@ BEGIN
         END IF;
         GRANT USAGE ON SCHEMA core, policy, audit, scenario, agent_state TO app_worker;
         GRANT SELECT ON ALL TABLES IN SCHEMA core, policy TO app_worker;
+        GRANT INSERT, SELECT ON core.cases TO app_worker;
         GRANT INSERT, SELECT ON audit.investigation_runs, audit.human_decisions, audit.model_promotions, audit.security_events TO app_worker;
         GRANT INSERT, SELECT ON scenario.risk_concerns, scenario.scenario_sets, scenario.expected_outcomes, scenario.control_runs TO app_worker;
         GRANT ALL ON SCHEMA agent_state TO app_worker;

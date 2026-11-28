@@ -88,8 +88,8 @@ def train(X: np.ndarray, y: np.ndarray, family: str = "auto") -> dict:
 def load():
     import pickle
 
-    sup = pickle.loads((MODEL_DIR / "supervised.pkl").read_bytes())
-    iso = pickle.loads((MODEL_DIR / "isoforest.pkl").read_bytes())
+    sup = pickle.loads((MODEL_DIR / "supervised.pkl").read_bytes())  # nosec B301 - trusted local model artifact produced by scripts/train.py
+    iso = pickle.loads((MODEL_DIR / "isoforest.pkl").read_bytes())  # nosec B301 - trusted local model artifact produced by scripts/train.py
     return sup, iso
 
 
@@ -119,7 +119,7 @@ def explain(vec: list[float], top_k: int = 5) -> list[dict]:
 
         import shap
 
-        sup = pickle.loads((MODEL_DIR / "supervised.pkl").read_bytes())
+        sup = pickle.loads((MODEL_DIR / "supervised.pkl").read_bytes())  # nosec B301 - trusted local model artifact produced by scripts/train.py
         ex = shap.TreeExplainer(sup)
         import numpy as np
 

@@ -1,0 +1,4 @@
+; Bandit INI config for OmniGuard AML (use with: bandit -r src/ -ll --ini .bandit)
+; Justifications are recorded in SECURITY_ASSESSMENT.md -> "Static analysis".
+[bandit]
+skips: B608,B301

@@ -8,9 +8,18 @@ from __future__ import annotations
 import re
 import secrets
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
+from security import auth
+from security import case_store
+from security.auth import User
+from security.headers import SecurityHeadersMiddleware
 
 from . import graphs_investigation as gi
 from . import graphs_scenario as gs
@@ -25,12 +34,39 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Rate limiting (OWASP LLM06:2026 / API4:2023). Limits are configurable so
+# deployments can tighten them; in-memory storage is documented in the
+# security assessment (use Redis behind multiple workers in production).
+limiter = Limiter(key_func=get_remote_address, default_limits=[])
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Rate limit exceeded", "error": str(exc.detail)},
+        headers={"Retry-After": "60"},
+    )
 
 
 def require_key(x_api_key: str = Header(default="", alias="X-API-Key")) -> str:
     if not x_api_key or not secrets.compare_digest(x_api_key, settings.API_KEY):
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
     return x_api_key
+
+
+def require_user_or_key(
+    request: Request,
+    x_api_key: str = Header(default="", alias="X-API-Key"),
+    authorization: str | None = Header(default=None),
+) -> User:
+    """Accept the legacy API key (service principal) or a verified JWT."""
+    if x_api_key and secrets.compare_digest(x_api_key, settings.API_KEY):
+        return User(username="service", role="service")
+    return auth.get_current_user(authorization)
 
 
 class ReviewBody(BaseModel):
@@ -46,6 +82,18 @@ class ScenarioBody(BaseModel):
     submitted_by: str = "unknown"
 
 
+class LoginBody(BaseModel):
+    username: str = Field(min_length=1, max_length=128)
+    password: str = Field(min_length=1, max_length=256)
+
+
+class CaseCreateBody(BaseModel):
+    alert_id: str = Field(min_length=1)
+    account_id: str = Field(min_length=1)
+    customer_id: str = ""
+    assigned_analyst: str = ""
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "services": {"api": "up", "queue": "redis" if settings.REDIS_URL else "fallback",
@@ -57,8 +105,75 @@ def auth_check(_: None = Depends(require_key)) -> dict:
     return {"status": "ok", "auth": "valid"}
 
 
+@app.post("/auth/login")
+@limiter.limit(settings.RATE_LIMIT_LOGIN)
+def login(body: LoginBody, request: Request) -> dict:
+    """Exchange bcrypt-verified credentials for a short-lived HS256 JWT."""
+    user = auth.authenticate(body.username, body.password)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    token = auth.create_access_token(user.username, user.role)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_in": int(settings.JWT_TTL_MINUTES) * 60,
+        "role": user.role,
+        "username": user.username,
+    }
+
+
+@app.post("/cases", status_code=201)
+@limiter.limit(settings.RATE_LIMIT_CASES)
+def create_case(
+    body: CaseCreateBody,
+    request: Request,
+    user: User = Depends(auth.require_roles("analyst", "admin")),
+) -> dict:
+    """Create a case, encrypting regulated identifiers before persistence."""
+    owner = body.assigned_analyst or user.username
+    if not user.is_admin and not secrets.compare_digest(owner, user.username):
+        raise HTTPException(
+            status_code=403,
+            detail="Analysts may only create cases assigned to themselves",
+        )
+    return case_store.create_case(
+        alert_id=body.alert_id,
+        account_id=body.account_id,
+        customer_id=body.customer_id,
+        assigned_analyst=owner,
+    )
+
+
+@app.get("/cases")
+@limiter.limit(settings.RATE_LIMIT_CASES)
+def list_cases(
+    request: Request,
+    status: str | None = None,
+    q: str | None = None,
+    limit: int = 25,
+    user: User = Depends(auth.require_roles("analyst", "admin")),
+) -> dict:
+    """Parameterized case search (no string interpolation of user input)."""
+    return {"cases": case_store.list_cases(user, status=status, q=q, limit=limit)}
+
+
+@app.get("/cases/{case_id}")
+def read_case(
+    case_id: str,
+    user: User = Depends(auth.require_roles("analyst", "admin")),
+) -> dict:
+    """Read one case; ownership is checked before any decryption occurs."""
+    return case_store.get_case(user, case_id)
+
+
 @app.post("/investigate/{alert_id}", status_code=202)
-async def investigate(alert_id: str, _: None = Depends(require_key)) -> dict:
+@limiter.limit(settings.RATE_LIMIT_INVESTIGATE)
+async def investigate(
+    alert_id: str,
+    request: Request,
+    principal: User = Depends(require_user_or_key),
+) -> dict:
+    case_store.enforce_investigation_access(principal, alert_id)
     job_id = await q.enqueue_investigation(alert_id)
     return {"status": "accepted", "job_id": job_id}
 
@@ -68,7 +183,7 @@ async def investigate_status(alert_id: str, _: None = Depends(require_key)) -> d
     con = connect()
     try:
         cur = con.cursor()
-        row = fetchone(cur, f"SELECT run_id, disposition, ml_scores, verifier_result, token_cost,"
+        row = fetchone(cur, f"SELECT run_id, disposition, ml_scores, verifier_result, token_cost,"  # nosec B608 - table name from fixed t() whitelist, all values bound
                             f" injection_scan, created_at"
                             f" FROM {t('investigation_runs')}"
                             f" WHERE alert_id=? ORDER BY created_at DESC LIMIT 1", (alert_id,))
@@ -103,7 +218,7 @@ async def scenario_status(sid: str, _: None = Depends(require_key)) -> dict:
     con = connect()
     try:
         cur = con.cursor()
-        row = fetchone(cur, f"SELECT set_id, status, challenger_findings FROM {t('scenario_sets')}"
+        row = fetchone(cur, f"SELECT set_id, status, challenger_findings FROM {t('scenario_sets')}"  # nosec B608 - table name from fixed t() whitelist, all values bound
                             f" WHERE set_id=? OR concern_id=? ORDER BY created_at DESC LIMIT 1", (sid, sid))
         if not row:
             return {"state": "queued", "id": sid}
@@ -149,7 +264,7 @@ def alerts(limit: int = 25, _: None = Depends(require_key)) -> dict:
         cur = con.cursor()
         rows = fetchall(
             cur,
-            f"SELECT a.alert_id, a.account_id, a.trigger, a.trigger_reason, a.status,"
+            f"SELECT a.alert_id, a.account_id, a.trigger, a.trigger_reason, a.status,"  # nosec B608 - table name from fixed t() whitelist, all values bound
             f" a.window_start, a.window_end, c.customer_name"
             f" FROM {t('alerts')} a LEFT JOIN {t('accounts')} c ON c.account_id = a.account_id"
             f" ORDER BY a.created_at DESC LIMIT ?",
@@ -170,23 +285,23 @@ def graph(alert_id: str, _: None = Depends(require_key)) -> dict:
     con = connect()
     try:
         cur = con.cursor()
-        alert = fetchone(cur, f"SELECT * FROM {t('alerts')} WHERE alert_id=?", (alert_id,))
+        alert = fetchone(cur, f"SELECT * FROM {t('alerts')} WHERE alert_id=?", (alert_id,))  # nosec B608 - table name from fixed t() whitelist, all values bound
         if not alert:
             raise HTTPException(status_code=404, detail="alert not found")
         acct_id = alert["account_id"]
-        focal = fetchone(cur, f"SELECT * FROM {t('accounts')} WHERE account_id=?", (acct_id,)) or {
+        focal = fetchone(cur, f"SELECT * FROM {t('accounts')} WHERE account_id=?", (acct_id,)) or {  # nosec B608 - table name from fixed t() whitelist, all values bound
             "account_id": acct_id, "customer_name": acct_id,
         }
         txs = fetchall(
             cur,
-            f"SELECT * FROM {t('transactions')} WHERE src_account=? OR dst_account=? ORDER BY ts DESC",
+            f"SELECT * FROM {t('transactions')} WHERE src_account=? OR dst_account=? ORDER BY ts DESC",  # nosec B608 - table name from fixed t() whitelist, all values bound
             (acct_id, acct_id),
         )
         ids = sorted({r["src_account"] for r in txs} | {r["dst_account"] for r in txs})
         accts: dict[str, dict] = {}
         if ids:
             ph = ",".join("?" for _ in ids)
-            for a in fetchall(cur, f"SELECT * FROM {t('accounts')} WHERE account_id IN ({ph})", tuple(ids)):
+            for a in fetchall(cur, f"SELECT * FROM {t('accounts')} WHERE account_id IN ({ph})", tuple(ids)):  # nosec B608 - table name from fixed t() whitelist, all values bound
                 accts[a["account_id"]] = a
         accts.setdefault(acct_id, focal)
 
@@ -278,7 +393,7 @@ async def scenario_results(sid: str, _: None = Depends(require_key)) -> dict:
     con = connect()
     try:
         cur = con.cursor()
-        row = fetchone(cur, f"SELECT * FROM {t('control_runs')} WHERE set_id=? ORDER BY created_at DESC LIMIT 1",
+        row = fetchone(cur, f"SELECT * FROM {t('control_runs')} WHERE set_id=? ORDER BY created_at DESC LIMIT 1",  # nosec B608 - table name from fixed t() whitelist, all values bound
                        (sid,))
         if not row:
             raise HTTPException(status_code=404, detail="no control runs yet")

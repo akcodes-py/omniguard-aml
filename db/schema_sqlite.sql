@@ -50,6 +50,20 @@ CREATE TABLE IF NOT EXISTS alerts (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Regulated case records. Account/customer identifiers are AES-256-GCM
+-- ciphertext produced by security.encryption (never plaintext at rest).
+CREATE TABLE IF NOT EXISTS cases (
+    case_id           TEXT PRIMARY KEY,
+    alert_id          TEXT,
+    account_id_enc    TEXT NOT NULL,
+    customer_id_enc   TEXT,
+    assigned_analyst  TEXT NOT NULL,
+    status            TEXT NOT NULL DEFAULT 'OPEN',
+    created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS cases_analyst_idx ON cases (assigned_analyst, status);
+CREATE INDEX IF NOT EXISTS cases_alert_idx ON cases (alert_id);
+
 CREATE TABLE IF NOT EXISTS graph_features (
     alert_id TEXT PRIMARY KEY REFERENCES alerts(alert_id),
     pagerank REAL,

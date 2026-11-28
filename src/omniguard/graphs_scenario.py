@@ -19,7 +19,7 @@ def ingest(concern_text: str, submitted_by: str) -> str:
     con = connect()
     try:
         cur = con.cursor()
-        run(cur, f"INSERT INTO {t('risk_concerns')} (concern_id, concern_text, submitted_by) VALUES (?,?,?)",
+        run(cur, f"INSERT INTO {t('risk_concerns')} (concern_id, concern_text, submitted_by) VALUES (?,?,?)",  # nosec B608 - table name from fixed t() whitelist, all values bound
             (cid, concern_text, submitted_by))
         if hasattr(con, "commit"):
             con.commit()
@@ -32,7 +32,7 @@ def run_scenariolab(concern_id: str) -> dict:
     con = connect()
     try:
         cur = con.cursor()
-        concern = fetchone(cur, f"SELECT * FROM {t('risk_concerns')} WHERE concern_id=?", (concern_id,))
+        concern = fetchone(cur, f"SELECT * FROM {t('risk_concerns')} WHERE concern_id=?", (concern_id,))  # nosec B608 - table name from fixed t() whitelist, all values bound
         if not concern:
             raise KeyError(concern_id)
     finally:
@@ -47,10 +47,10 @@ def run_scenariolab(concern_id: str) -> dict:
     con = connect()
     try:
         cur = con.cursor()
-        run(cur, f"INSERT INTO {t('scenario_sets')} (set_id, concern_id, version, scenarios, scenario_hash,"
+        run(cur, f"INSERT INTO {t('scenario_sets')} (set_id, concern_id, version, scenarios, scenario_hash,"  # nosec B608 - table name from fixed t() whitelist, all values bound
                  f" generated_txs, challenger_findings, diversity_score, status) VALUES (?,?,?,?,?,?,?,?,?)",
             (set_id, concern_id, 1, dumps(specs), s_hash, dumps(txs), dumps(findings), 0.85, "LOCKED"))
-        run(cur, f"INSERT INTO {t('expected_outcomes')} (outcome_id, set_id, expectations, expectation_hash)"
+        run(cur, f"INSERT INTO {t('expected_outcomes')} (outcome_id, set_id, expectations, expectation_hash)"  # nosec B608 - table name from fixed t() whitelist, all values bound
                  f" VALUES (?,?,?,?)", (out_id, set_id, dumps(expectations), e_hash))
         if hasattr(con, "commit"):
             con.commit()
@@ -66,8 +66,8 @@ def approve_and_execute(set_id: str, control_id: str = "rule_48h_passthrough",
     con = connect()
     try:
         cur = con.cursor()
-        sset = fetchone(cur, f"SELECT * FROM {t('scenario_sets')} WHERE set_id=?", (set_id,))
-        out = fetchone(cur, f"SELECT * FROM {t('expected_outcomes')} WHERE set_id=?", (set_id,))
+        sset = fetchone(cur, f"SELECT * FROM {t('scenario_sets')} WHERE set_id=?", (set_id,))  # nosec B608 - table name from fixed t() whitelist, all values bound
+        out = fetchone(cur, f"SELECT * FROM {t('expected_outcomes')} WHERE set_id=?", (set_id,))  # nosec B608 - table name from fixed t() whitelist, all values bound
     finally:
         con.close()
     if sset is None:
@@ -95,11 +95,11 @@ def approve_and_execute(set_id: str, control_id: str = "rule_48h_passthrough",
     con = connect()
     try:
         cur = con.cursor()
-        run(cur, f"INSERT INTO {t('control_runs')} (run_id, set_id, control_id, control_version, results,"
+        run(cur, f"INSERT INTO {t('control_runs')} (run_id, set_id, control_id, control_version, results,"  # nosec B608 - table name from fixed t() whitelist, all values bound
                  f" summary, coverage_gaps, evidence_pack_hash) VALUES (?,?,?,?,?,?,?,?)",
             (run_id, set_id, control_id, control_version, dumps(results), dumps(summary),
              sg.COVERAGE_GAPS_DEFAULT if is_postgres() else dumps(sg.COVERAGE_GAPS_DEFAULT), ev_hash))
-        run(cur, f"UPDATE {t('scenario_sets')} SET status=? WHERE set_id=?", ("EXECUTED", set_id))
+        run(cur, f"UPDATE {t('scenario_sets')} SET status=? WHERE set_id=?", ("EXECUTED", set_id))  # nosec B608 - table name from fixed t() whitelist, all values bound
         if hasattr(con, "commit"):
             con.commit()
     finally:

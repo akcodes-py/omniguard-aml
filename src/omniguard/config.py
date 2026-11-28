@@ -62,5 +62,21 @@ class Settings(BaseSettings):
     SECURITY_LOG_PATH: str = "data/security_events.jsonl"
     SECURITY_DB_SINK: bool = False
 
+    # --- Regulated field encryption (no defaults: keys come from env only) ---
+    # Generate with: python -c "from security.encryption import generate_key; print(generate_key())"
+    ENCRYPTION_KEY: str = ""
+    JWT_SECRET_KEY: str = ""
+    JWT_TTL_MINUTES: int = 15
+    # bcrypt password hashes + roles, e.g.:
+    # [{"username":"alice","password_hash":"$2b$12$...","role":"analyst"}]
+    OMNIGUARD_USERS_JSON: str = ""
+
+    # --- Transport / response hardening (LLM06:2026, API4:2023) ---
+    TLS_ENABLED: bool = False
+    HSTS_MAX_AGE: int = 31536000
+    RATE_LIMIT_LOGIN: str = "20/minute"
+    RATE_LIMIT_INVESTIGATE: str = "100/minute"
+    RATE_LIMIT_CASES: str = "200/minute"
+
 
 settings = Settings()

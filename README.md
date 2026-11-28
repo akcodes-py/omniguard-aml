@@ -5,7 +5,7 @@
 
 *Bridging Upstream Control Stress-Testing with Downstream Citation-Grounded Autonomous Investigation*
 
-[![Tests](https://img.shields.io/badge/pytest-54%20passed-success?style=for-the-badge&logo=pytest&logoColor=white)](#-measured-results)
+[![Tests](https://img.shields.io/badge/pytest-81%20passed-success?style=for-the-badge&logo=pytest&logoColor=white)](#-measured-results)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue?style=for-the-badge&logo=python&logoColor=white)](#-quickstart-local-no-docker)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](#-system-architecture)
 [![NVIDIA NIM](https://img.shields.io/badge/NVIDIA%20NIM-Nemotron--3-76B900?style=for-the-badge&logo=nvidia&logoColor=white)](#-models--inference)
@@ -105,6 +105,40 @@ OmniGuard enforces non-negotiable architectural guardrails designed for financia
 - 🧠 **Grounded Agency**: A prompt injection can set an exoneration boolean but cannot invent a KYC field. No adjudication result can auto-close an alert.
 - 🔏 **Pre-Execution SHA-256 Locking**: Expected scenario outcomes are cryptographically locked prior to control execution to eliminate retroactive outcome tampering.
 - 🛡️ **No Transaction Vector Search**: SQL queries use strict parameterized execution; vector similarity (`pgvector`) is strictly restricted to policy manuals and static regulatory scenarios.
+
+---
+
+## 🔐 Security Controls (2026 hardening)
+
+The table below summarises the controls added for regulated-data handling. Full threat model,
+OWASP LLM/Agentic/API mapping tables, VAPT findings and CI results are in
+**[SECURITY_ASSESSMENT.md](SECURITY_ASSESSMENT.md)**. Model explainability, HITL rules and bias
+monitoring remain documented in **[MODEL_CARD.md](MODEL_CARD.md)**.
+
+| Control | Implementation | Verification |
+|---|---|---|
+| **AES-256-GCM field encryption** | `src/security/encryption.py` + `src/security/case_store.py`; 32-byte `ENCRYPTION_KEY`, fresh 12-byte nonce, `DecryptionTamperError` on tamper | `tests/test_encryption.py` (incl. DB ciphertext assertion) |
+| **JWT auth + RBAC + BOLA/IDOR** | `src/security/auth.py`; bcrypt cost 12, short-lived HS256 (`JWT_SECRET_KEY`), `analyst`/`admin` roles, per-case `assigned_analyst` checks (403) | `tests/test_auth_idor_sqli.py` |
+| **SQL-injection defense** | Strictly parameterized SQL everywhere; `LIKE ? ESCAPE '\'`; table names from a fixed whitelist | SQLi payload tests (no 500s, zero unauthorized rows) |
+| **Rate limiting (LLM06:2026)** | `slowapi` on `/auth/login`, `/investigate`, `/cases` → 429 + `Retry-After` | `test_login_rate_limit_returns_429` |
+| **Security headers** | `src/security/headers.py`: HSTS (TLS only), `nosniff`, `DENY`, CSP, `no-referrer` | `test_security_headers_on_every_response` |
+| **PII masking + injection quarantine** | Existing deterministic masker and scanners, now mapped to 2026 IDs | `tests/test_owasp_2026.py`, `tests/test_owasp_llm.py` |
+| **Append-only audit** | PostgreSQL triggers + JSONL `security_events` (unchanged) | `test_a09_2025_event_schema_is_structured_and_append_only` |
+
+### New hardened endpoints
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| `POST` | `/auth/login` | bcrypt credentials | Returns short-lived bearer JWT |
+| `POST` | `/cases` | JWT (`analyst`/`admin`) | Creates case; regulated identifiers encrypted before INSERT |
+| `GET` | `/cases` | JWT | Parameterized `status` / `q` / `limit` filters; analysts see only assigned cases |
+| `GET` | `/cases/{case_id}` | JWT + ownership | Decrypts identifiers only after authorization (403 otherwise) |
+| `POST` | `/investigate/{alert_id}` | API key **or** JWT | JWT analysts must own a case linked to the alert |
+
+Before using these endpoints, export `ENCRYPTION_KEY`, `JWT_SECRET_KEY` and
+`OMNIGUARD_USERS_JSON` (bcrypt hashes, never plaintext) — see `.env.example` and the assessment.
+VAPT artifacts: [Postman collection](docs/omniguard_aml.postman_collection.json) ·
+[Burp checklist](docs/BURP_SUITE_CHECKLIST.md).
 
 ---
 
@@ -219,6 +253,10 @@ python -m venv .venv
 
 # Install Python dependencies
 pip install -r requirements.txt
+
+# (Optional) supply keys for the hardened endpoints — see .env.example
+# python -c "from security.encryption import generate_key; print(generate_key())"
+# python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
 ### 2. Initialize Database & Seed Baseline Data

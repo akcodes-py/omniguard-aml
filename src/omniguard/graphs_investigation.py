@@ -105,13 +105,13 @@ def fetch_alert(alert_id: str) -> dict:
     con = connect()
     try:
         cur = con.cursor()
-        alert = _row(cur, f"SELECT * FROM {t('alerts')} WHERE alert_id=?", (alert_id,))
+        alert = _row(cur, f"SELECT * FROM {t('alerts')} WHERE alert_id=?", (alert_id,))  # nosec B608 - table name from fixed t() whitelist, all values bound
         if not alert:
             raise KeyError(f"alert not found: {alert_id}")
-        acct = _row(cur, f"SELECT * FROM {t('accounts')} WHERE account_id=?", (alert["account_id"],))
-        txs = _rows(cur, f"SELECT * FROM {t('transactions')} WHERE src_account=? OR dst_account=? ORDER BY ts",
+        acct = _row(cur, f"SELECT * FROM {t('accounts')} WHERE account_id=?", (alert["account_id"],))  # nosec B608 - table name from fixed t() whitelist, all values bound
+        txs = _rows(cur, f"SELECT * FROM {t('transactions')} WHERE src_account=? OR dst_account=? ORDER BY ts",  # nosec B608 - table name from fixed t() whitelist, all values bound
                     (alert["account_id"], alert["account_id"]))
-        hrs = _rows(cur, f"SELECT account_id FROM {t('accounts')} WHERE high_risk_jurisdiction")
+        hrs = _rows(cur, f"SELECT account_id FROM {t('accounts')} WHERE high_risk_jurisdiction")  # nosec B608 - table name from fixed t() whitelist, all values bound
         hr_set = {r["account_id"] for r in hrs}
         return {"alert": alert, "account": acct or {}, "txs": txs, "high_risk": hr_set}
     finally:
@@ -311,7 +311,7 @@ async def node_write_audit_record(state: InvestigationState) -> dict:
                 " investigator_output, challenger_output, verifier_result, disposition,"
                 " prompt_version_hash, model_id, token_cost")
         run(cur,
-              f"INSERT INTO {t('investigation_runs')} ({cols}) VALUES ("
+              f"INSERT INTO {t('investigation_runs')} ({cols}) VALUES ("  # nosec B608 - table name from fixed t() whitelist, all values bound
               + ",".join(["?"] * 17) + ")",
               (run_id, state["alert_id"], thread_id,
                tx_ids[-1] if tx_ids else "",
@@ -452,18 +452,18 @@ def review(alert_id: str, run_id: str, analyst_id: str,
     con = connect()
     try:
         cur = con.cursor()
-        run_row = _row(cur, f"SELECT * FROM {t('investigation_runs')} WHERE run_id=?", (run_id,))
+        run_row = _row(cur, f"SELECT * FROM {t('investigation_runs')} WHERE run_id=?", (run_id,))  # nosec B608 - table name from fixed t() whitelist, all values bound
         if not run_row:
             raise KeyError(f"run not found: {run_id}")
-        alert = _row(cur, f"SELECT * FROM {t('alerts')} WHERE alert_id=?", (alert_id,))
-        txs = _rows(cur, f"SELECT tx_id FROM {t('transactions')} WHERE src_account=? OR dst_account=? ORDER BY ts",
+        alert = _row(cur, f"SELECT * FROM {t('alerts')} WHERE alert_id=?", (alert_id,))  # nosec B608 - table name from fixed t() whitelist, all values bound
+        txs = _rows(cur, f"SELECT tx_id FROM {t('transactions')} WHERE src_account=? OR dst_account=? ORDER BY ts",  # nosec B608 - table name from fixed t() whitelist, all values bound
                     (alert["account_id"], alert["account_id"]))
         latest = txs[-1]["tx_id"] if txs else ""
         stored_mark = run_row["tx_watermark"]
         stale = bool(latest and stored_mark and latest != stored_mark)
         if stale:
             did = uuid.uuid4().hex
-            run(cur, f"INSERT INTO {t('human_decisions')} "
+            run(cur, f"INSERT INTO {t('human_decisions')} "  # nosec B608 - table name from fixed t() whitelist, all values bound
                   f"(decision_id, run_id, alert_id, analyst_id, decision, rationale, stale_rerun) "
                   f"VALUES (?,?,?,?,?,?,?)",
                   (did, run_id, alert_id, analyst_id, "REQUEST_RERUN",
@@ -477,7 +477,7 @@ def review(alert_id: str, run_id: str, analyst_id: str,
             )
             return {"status": "rerun_triggered", "stale": True, "latest_tx": latest}
         did = uuid.uuid4().hex
-        run(cur, f"INSERT INTO {t('human_decisions')} "
+        run(cur, f"INSERT INTO {t('human_decisions')} "  # nosec B608 - table name from fixed t() whitelist, all values bound
               f"(decision_id, run_id, alert_id, analyst_id, decision, rationale, stale_rerun) "
               f"VALUES (?,?,?,?,?,?,?)",
               (did, run_id, alert_id, analyst_id, norm, rationale or norm, False))

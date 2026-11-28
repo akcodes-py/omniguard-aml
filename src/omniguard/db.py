@@ -25,6 +25,7 @@ _PG_PREFIX = {
     "accounts": "core.accounts",
     "transactions": "core.transactions",
     "alerts": "core.alerts",
+    "cases": "core.cases",
     "graph_features": "core.graph_features",
     "policy_notes": "policy.policy_notes",
     "investigation_runs": "audit.investigation_runs",

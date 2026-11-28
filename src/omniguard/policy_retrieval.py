@@ -41,7 +41,7 @@ def retrieve(query_tags: list[str], query_text: str = "", top_k: int = 4) -> lis
 
             cur = con.cursor()
             cur.execute(
-                f"SELECT policy_id, version, version_hash, typology_tag, title, body, effective_to, embedding "
+                f"SELECT policy_id, version, version_hash, typology_tag, title, body, effective_to, embedding "  # nosec B608 - table name from fixed t() whitelist, all values bound
                 f"FROM {t('policy_notes')} WHERE effective_to IS NULL"
             )
             rows = cur.fetchall()

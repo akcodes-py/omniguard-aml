@@ -104,7 +104,7 @@ def _write_db(record: dict[str, Any]) -> None:
     try:
         cur = con.cursor()
         run(cur,
-            f"INSERT INTO {t('security_events')} "
+            f"INSERT INTO {t('security_events')} "  # nosec B608 - table name from fixed t() whitelist, all values bound
             "(event_id, timestamp, case_id, owasp_category, action_taken, details) "
             "VALUES (?,?,?,?,?,?)",
             (record["event_id"], record["timestamp"], record["case_id"],
